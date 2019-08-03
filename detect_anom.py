@@ -129,6 +129,9 @@ def detect(file, amountanom, realtime):
     X_test['score'] = scores_series.values
     X_test['pred'] = pred_series.values
 
+    # Add the score the bro_df
+    bro_df['score'] = X_test['score']
+
     # Keep the positive predicions only
     X_test_predicted = X_test[X_test.pred == 1]
 
@@ -136,10 +139,10 @@ def detect(file, amountanom, realtime):
     top10 = X_test_predicted.sort_values(by='score', ascending=False).iloc[:amountanom]
 
 
-    print('\nTop {} anomalies detected.'.format(amountanom))
-    print(top10)
     print('\nFlows of the top anomalies')
-    print(bro_df.iloc[top10.index])
+    df_to_print = bro_df.iloc[top10.index]
+    df_to_print = df_to_print.drop(['conn_state','history','local_orig' ,'local_resp' ,'missed_bytes' ,'ts' ,'tunnel_parents' ,'uid' ,'label' ], axis=1)
+    print(df_to_print)
 
 
 
