@@ -1,4 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# This file is part of the Stratosphere Linux IPS
+# See the file 'LICENSE' for copying permission.
+# Author: Sebastian Garcia. eldraco@gmail.com , sebastian.garcia@agents.fel.cvut.cz
 
 import pandas as pd
 from brothon import bro_log_reader
@@ -29,125 +32,119 @@ warnings.warn = warn
 
 def detect(file, amountanom, realtime):
     """
-    Simple anomaly detector
+    Functon to apply a very simple anomaly detector
+    amountanom: The top number of anomalies we want to print
+    realtime: If we want to read the conn.log file in real time (not working)
     """
-    # Create a bro reader on a given log file
+
+    # Create a zeek reader on a given log file. Thanks brothon
     reader = bro_log_reader.BroLogReader(file, tail=realtime)
     # Create a Pandas dataframe from reader
     bro_df = pd.DataFrame(reader.readrows())
 
-
-    #X = bro_df.drop('label', axis=1)
+    # In case you need a label, due to some models being able to work in a semisupervized mode, then put it here. For now everything is 'normal', but we are not using this for detection
     bro_df['label'] = 'normal'
-    # Change the datetime delta value to seconds
+    # Change the datetime delta value to seconds. Scikit does not now how to work with timedeltas
     bro_df['durationsec'] = bro_df.duration.apply(lambda x: x.total_seconds())
-    # Replace the rows without orig_bytes with -1
+    # Replace the rows without data (with '-') with -1. Even though this may add a bias in the algorithms, is better than not using the lines.
     bro_df['orig_bytes'] = bro_df['orig_bytes'].replace(to_replace='-',value=-1)
     bro_df['resp_bytes'] = bro_df['resp_bytes'].replace(to_replace='-',value=-1)
     bro_df['resp_pkts'] = bro_df['resp_pkts'].replace(to_replace='-',value=-1)
     bro_df['orig_ip_bytes'] = bro_df['orig_ip_bytes'].replace(to_replace='-',value=-1)
     bro_df['resp_ip_bytes'] = bro_df['resp_ip_bytes'].replace(to_replace='-',value=-1)
 
-    # Our X now
-    #X = bro_df[['durationsec', 'orig_bytes']]
-    X = bro_df[['durationsec', 'orig_bytes', 'id.resp_p', 'resp_bytes', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes']]
-    # Our y now
+    # Add the columns from the log file that we know are numbers. This is only for conn.log files.
+    X_train = bro_df[['durationsec', 'orig_bytes', 'id.resp_p', 'resp_bytes', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes']]
+    # Our y is the label. But we are not using it now.
     y = bro_df.label
 
-    # split in train/test
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.05, random_state=42)
-
-    # Train in X and test X
-    X_train = X
-    X_test = X
+    # The X_test is where we are going to search for anomalies. In our case, its the same set of data than X_train. 
+    X_test = X_train
 
     #################
-    # Select the model
-    # Try ABOD
-    #outlier_fraction = 0.00001
-    #clf = ABOD(contamination=0.1)
+    # Select a model from below
+
+    # ABOD class for Angle-base Outlier Detection. For an observation, the variance of its weighted cosine scores to all neighbors could be viewed as the outlying score.
     #clf = ABOD()
 
-    # Try LOF
+    # LOF
     #clf = LOF()
 
-    # Try CBLOF
+    # CBLOF
     #clf = CBLOF()
 
-    # Try LOCI
+    # LOCI
     #clf = LOCI()
     
-    # Try LSCP
+    # LSCP
     #clf = LSCP()
 
-    # Try MCD
+    # MCD
     #clf = MCD()
 
-    # Try OCSVM
+    # OCSVM
     #clf = OCSVM()
 
-    # Try PCA. Good and fast!
+    # PCA. Good and fast!
     clf = PCA()
 
-    # Try SOD. 
+    # SOD 
     #clf = SOD()
 
-    # Try SO_GAAL. 
+    # SO_GAAL
     #clf = SO_GALL()
 
-    # Try SOS. 
+    # SOS
     #clf = SOS()
 
-    # Try XGBOD. 
+    # XGBOD
     #clf = XGBOD()
 
 
 
-    # Try KNN
+    # KNN
+    # Good results but slow
     #clf = KNN()
-    # contamination=0.1, "method='largest'", 'radius=1.0', "algorithm='auto'", 'leaf_size=30', "metric='minkowski'", 'p=2', 'metric_params=None'
-    #clf = KNN(contamination=0.5, n_neighbors=10)
     #clf = KNN(n_neighbors=10)
     #################
 
     # Fit the model to the train data
     clf.fit(X_train)
 
-    # get the prediction label and outlier scores of the training data
-    #y_train_pred = clf.labels_  # binary labels (0: inliers, 1: outliers)
-    #y_train_scores = clf.decision_scores_  # raw outlier scores
-
     # get the prediction on the test data
     y_test_pred = clf.predict(X_test)  # outlier labels (0 or 1)
     y_test_scores = clf.decision_function(X_test)  # outlier scores
 
-    # Convert to series
+    # Convert the ndarrays of scores and predictions to  pandas series
     scores_series = pd.Series(y_test_scores)
     pred_series = pd.Series(y_test_pred)
 
-    # Add as new columns to the X test
+    # Now use the series to add a new column to the X test
     X_test['score'] = scores_series.values
     X_test['pred'] = pred_series.values
 
-    # Add the score the bro_df
+    # Add the score to the bro_df also. So we can show it at the end
     bro_df['score'] = X_test['score']
 
-    # Keep the positive predicions only
+    # Keep the positive predictions only. That is, keep only what we predict is an anomaly.
     X_test_predicted = X_test[X_test.pred == 1]
 
-    # Keep the top 
+    # Keep the top X amount of anomalies
     top10 = X_test_predicted.sort_values(by='score', ascending=False).iloc[:amountanom]
 
-
-    print('\nFlows of the top anomalies')
+    ## Print the results
+    # Find the predicted anomalies in the original bro dataframe, where the rest of the data is
     df_to_print = bro_df.iloc[top10.index]
+    print('\nFlows of the top anomalies')
+    # Only print some columns, not all, so its easier to read.
     df_to_print = df_to_print.drop(['conn_state','history','local_orig' ,'local_resp' ,'missed_bytes' ,'ts' ,'tunnel_parents' ,'uid' ,'label' ], axis=1)
     print(df_to_print)
 
 
 
 if __name__ == '__main__':
-    print('Simple Anomaly Detector.')
+    print('Simple Anomaly Detector for Zeek conn.log files.')
+    print('Sebastian Garcia. eldraco@gmail.com.')
 
     # Parse the parameters
     parser = argparse.ArgumentParser()
