@@ -45,4 +45,6 @@ Using the PCA model, ```zeek_anomaly_detector.py``` is capable of training and t
 
 
 
-
+# TODO
+- Add categorical data
+- filter flows that we don't want to treat
