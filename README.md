@@ -2,6 +2,13 @@
 
 An anomaly detector for conn.log files of zeek/bro. It uses brothon to load the file, and pyod models. Its completely automated, so you can just give the file and will ouput the anomalous flows. By default uses the PCA model.
 
+## Dependencies
+
+Please install the following dependencies:
+- brothon: The BroThon package supports the ingestion, processing, and analysis of Bro IDS data with Python.
+- pyod: PyOD is a comprehensive and scalable Python toolkit for detecting outlying objects in multivariate data. 
+
+Install with pip: `pip install brothon pyod`
 
 ## Usage
 ```
