@@ -14,7 +14,7 @@ Install with pip: `pip install zat pyod`
 ```
 $ time ./zeek_anomaly_detector.py -a 20 -f sample-logs/conn.log
 Simple Anomaly Detector for Zeek conn.log files.
-Sebastian Garcia. eldraco@gmail.com.
+Authors: Sebastian Garcia (eldraco@gmail.com), Veronica Valeros (vero.valeros@gmail.com)
 Successfully monitoring sample-logs/conn.log...
 
 Flows of the top anomalies
