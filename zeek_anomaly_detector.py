@@ -4,7 +4,8 @@
 # Author: Sebastian Garcia. eldraco@gmail.com , sebastian.garcia@agents.fel.cvut.cz
 
 import pandas as pd
-from brothon import bro_log_reader
+from zat import bro_log_reader
+from zat.log_to_dataframe import LogToDataFrame
 from sklearn.model_selection import train_test_split
 from pyod.models import lof
 from pyod.models.abod import ABOD
@@ -28,33 +29,38 @@ def warn(*args, **kwargs):
     pass
 warnings.warn = warn
 
-
-
-def detect(file, amountanom, realtime):
+def detect(file, amountanom, realtime,dumptocsv):
     """
     Function to apply a very simple anomaly detector
     amountanom: The top number of anomalies we want to print
     realtime: If we want to read the conn.log file in real time (not working)
     """
 
-    # Create a zeek reader on a given log file. Thanks brothon
-    reader = bro_log_reader.BroLogReader(file, tail=realtime)
-    # Create a Pandas dataframe from reader
-    bro_df = pd.DataFrame(reader.readrows())
-
+    # Create a Pandas dataframe from the conn.log
+    log_to_df = LogToDataFrame()
+    bro_df = log_to_df.create_dataframe(file,ts_index=False)
+    
     # In case you need a label, due to some models being able to work in a semisupervized mode, then put it here. For now everything is 'normal', but we are not using this for detection
     bro_df['label'] = 'normal'
+
     # Change the datetime delta value to seconds. Scikit does not now how to work with timedeltas
     bro_df['durationsec'] = bro_df.duration.apply(lambda x: x.total_seconds())
+
     # Replace the rows without data (with '-') with -1. Even though this may add a bias in the algorithms, is better than not using the lines.
-    bro_df['orig_bytes'] = bro_df['orig_bytes'].replace(to_replace='-',value=-1)
-    bro_df['resp_bytes'] = bro_df['resp_bytes'].replace(to_replace='-',value=-1)
-    bro_df['resp_pkts'] = bro_df['resp_pkts'].replace(to_replace='-',value=-1)
-    bro_df['orig_ip_bytes'] = bro_df['orig_ip_bytes'].replace(to_replace='-',value=-1)
-    bro_df['resp_ip_bytes'] = bro_df['resp_ip_bytes'].replace(to_replace='-',value=-1)
+    bro_df['orig_bytes'] = bro_df['orig_bytes'].fillna(0)
+    bro_df['resp_bytes'] = bro_df['resp_bytes'].fillna(0)
+    bro_df['resp_pkts'] = bro_df['resp_pkts'].fillna(0)
+    bro_df['orig_ip_bytes'] = bro_df['orig_ip_bytes'].fillna(0)
+    bro_df['resp_ip_bytes'] = bro_df['resp_ip_bytes'].fillna(0)
+    bro_df['durationsec'] = bro_df['durationsec'].fillna(0)
+
+    # Save dataframe to disk as CSV
+    if dumptocsv != "None":
+        bro_df.to_csv(dumptocsv)
 
     # Add the columns from the log file that we know are numbers. This is only for conn.log files.
     X_train = bro_df[['durationsec', 'orig_bytes', 'id.resp_p', 'resp_bytes', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes']]
+
     # Our y is the label. But we are not using it now.
     y = bro_df.label
 
@@ -113,6 +119,7 @@ def detect(file, amountanom, realtime):
 
     # get the prediction on the test data
     y_test_pred = clf.predict(X_test)  # outlier labels (0 or 1)
+
     y_test_scores = clf.decision_function(X_test)  # outlier scores
 
     # Convert the ndarrays of scores and predictions to  pandas series
@@ -134,10 +141,11 @@ def detect(file, amountanom, realtime):
 
     ## Print the results
     # Find the predicted anomalies in the original bro dataframe, where the rest of the data is
+    #df_to_print = bro_df.iloc[top10.index]
     df_to_print = bro_df.iloc[top10.index]
-    print('\nFlows of the top anomalies')
+
     # Only print some columns, not all, so its easier to read.
-    df_to_print = df_to_print.drop(['conn_state','history','local_orig' ,'local_resp' ,'missed_bytes' ,'ts' ,'tunnel_parents' ,'uid' ,'label' ], axis=1)
+    df_to_print = df_to_print.drop(['conn_state','history','local_orig' ,'local_resp' ,'missed_bytes' ,'ts', 'tunnel_parents' ,'uid' ,'label' ], axis=1)
     print(df_to_print)
 
 
@@ -153,8 +161,9 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--file', help='Path to the conn.log input file to read.', required=True)
     parser.add_argument('-a', '--amountanom', help='Amount of anomalies to show.', required=False, default=10, type=int)
     parser.add_argument('-R', '--realtime', help='Read the conn.log in real time.', required=False, type=bool, default=False)
+    parser.add_argument('-D', '--dumptocsv', help='Dump the conn.log DataFrame to a csv file', required=False)
     args = parser.parse_args()
 
-    detect(args.file, args.amountanom, args.realtime)
+    detect(args.file, args.amountanom, args.realtime, args.dumptocsv)
 
 
