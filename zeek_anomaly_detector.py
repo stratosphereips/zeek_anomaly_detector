@@ -143,6 +143,7 @@ def detect(file, amountanom, realtime,dumptocsv):
     # Find the predicted anomalies in the original bro dataframe, where the rest of the data is
     #df_to_print = bro_df.iloc[top10.index]
     df_to_print = bro_df.iloc[top10.index]
+    print('\nFlows of the top anomalies')
 
     # Only print some columns, not all, so its easier to read.
     df_to_print = df_to_print.drop(['conn_state','history','local_orig' ,'local_resp' ,'missed_bytes' ,'ts', 'tunnel_parents' ,'uid' ,'label' ], axis=1)
