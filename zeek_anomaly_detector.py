@@ -32,7 +32,7 @@ warnings.warn = warn
 
 def detect(file, amountanom, realtime):
     """
-    Functon to apply a very simple anomaly detector
+    Function to apply a very simple anomaly detector
     amountanom: The top number of anomalies we want to print
     realtime: If we want to read the conn.log file in real time (not working)
     """
