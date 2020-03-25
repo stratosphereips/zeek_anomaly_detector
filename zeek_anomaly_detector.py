@@ -47,12 +47,9 @@ def detect(file, amountanom, realtime,dumptocsv):
     bro_df['durationsec'] = bro_df.duration.apply(lambda x: x.total_seconds())
 
     # Replace the rows without data (with '-') with -1. Even though this may add a bias in the algorithms, is better than not using the lines.
-    bro_df['orig_bytes'] = bro_df['orig_bytes'].fillna(0)
-    bro_df['resp_bytes'] = bro_df['resp_bytes'].fillna(0)
-    bro_df['resp_pkts'] = bro_df['resp_pkts'].fillna(0)
-    bro_df['orig_ip_bytes'] = bro_df['orig_ip_bytes'].fillna(0)
-    bro_df['resp_ip_bytes'] = bro_df['resp_ip_bytes'].fillna(0)
-    bro_df['durationsec'] = bro_df['durationsec'].fillna(0)
+    numeric_features_list = ['orig_bytes','resp_bytes','resp_pkts','orig_ip_bytes','resp_ip_bytes','durationsec']
+    for feature in numeric_features_list:
+        bro_df[feature] = bro_df[feature].fillna(0)
 
     # Save dataframe to disk as CSV
     if dumptocsv != "None":
