@@ -110,7 +110,10 @@ def detect(file, amountanom, realtime,dumptocsv):
     #clf = KNN()
     #clf = KNN(n_neighbors=10)
     #################
-
+    
+    # extract the value of dataframe to matrix
+    X_train = X_train.values
+    
     # Fit the model to the train data
     clf.fit(X_train)
 
