@@ -1,2 +1,4 @@
 *.ipynb
 *.log
+*.swp
+.DS_store
