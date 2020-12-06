@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # This file is part of the Stratosphere Linux IPS
 # See the file 'LICENSE' for copying permission.
-# Author: Sebastian Garcia. eldraco@gmail.com,
-# sebastian.garcia@agents.fel.cvut.cz
+# Authors:
+# - Sebastian Garcia. eldraco@gmail.com,
+#   sebastian.garcia@agents.fel.cvut.cz
+# - Veronica Valeros. vero.valeros@gmail.com
 
 import pandas as pd
 # from sklearn.model_selection import train_test_split
