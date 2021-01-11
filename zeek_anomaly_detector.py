@@ -49,6 +49,7 @@ def detect(file, amountanom, realtime, dumptocsv):
     # 'normal', but we are not using this for detection
     bro_df['label'] = 'normal'
 
+
     # Replace the rows without data (with '-') with 0.
     # Even though this may add a bias in the algorithms,
     # is better than not using the lines.
@@ -126,7 +127,10 @@ def detect(file, amountanom, realtime, dumptocsv):
     # clf = KNN()
     # clf = KNN(n_neighbors=10)
     #################
-
+    
+    # extract the value of dataframe to matrix
+    X_train = X_train.values
+    
     # Fit the model to the train data
     clf.fit(X_train)
 
