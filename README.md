@@ -1,4 +1,8 @@
 # zeek_anomaly_detector
+[![Docker Image CI](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/docker-image.yml/badge.svg)](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/docker-image.yml)
+![GitHub last commit (branch)](https://img.shields.io/github/last-commit/stratosphereips/zeek_anomaly_detector/main?color=green)
+![Docker Pulls](https://img.shields.io/docker/pulls/stratosphereips/zeek_anomaly_detector?color=green)
+
 
 An anomaly detector for conn.log files of zeek/bro. It uses Zeek Analysis Tools (ZAT) to load the file, and pyod models. It is completely automated, so you can just give the file and will ouput the anomalous flows. By default uses the PCA model.
 
