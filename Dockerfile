@@ -15,4 +15,4 @@ WORKDIR ${DESTINATION_DIR}
 
 RUN pip install -r requirements.txt
 
-RUN git submodule update --recursive --remote
+RUN git submodule update --init --recursive --remote
