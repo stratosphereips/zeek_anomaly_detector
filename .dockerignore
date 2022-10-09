@@ -1,0 +1,9 @@
+.git
+.github
+
+# Ignore Python specific cache files
+__pycache__
+.ipynb_checkpoints
+
+## Ignore OS configs (macOS)
+.DS_Store
