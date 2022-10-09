@@ -6,17 +6,14 @@
 
 An anomaly detector for conn.log files of zeek/bro. It uses Zeek Analysis Tools (ZAT) to load the file, and pyod models. It is completely automated, so you can just give the file and will ouput the anomalous flows. By default uses the PCA model.
 
-## Dependencies
+## Performace
 
-Please install the following dependencies:
-- zat: The ZAT Python package supports the processing and analysis of Zeek data with Pandas, scikit-learn, and Spark.
-- pyod: PyOD is a comprehensive and scalable Python toolkit for detecting outlying objects in multivariate data. 
+Using the PCA model the `zeek_anomaly_detector.py` is capable of training and testing 6.3 million flow lines in 11 minutes.
 
-Install with pip: `pip install zat pyod`
 
 ## Usage
-```
-$ time ./zeek_anomaly_detector.py -a 20 -f sample-logs/conn.log 
+```bash
+$ time ./zeek_anomaly_detector.py -a 20 -f dataset/conn.log 
 Simple Anomaly Detector for Zeek conn.log files. Version: 0.2
 Author: Sebastian Garcia (eldraco@gmail.com), Veronica Valeros (vero.valeros@gmail.com)
 
@@ -48,12 +45,28 @@ user	0m3.540s
 sys	0m0.581s
 ```
 
-# Performace
-Using the PCA model, ```zeek_anomaly_detector.py``` is capable of training and testing 6.3Million flow lines in 11minutes.
+## Installation
 
+### Docker
 
+The `zeek_anomaly_detector` has a public Docker image with the latest version:
+```bash
+docker run --rm -it stratosphereips/zeek_anomaly_detector:latest python3 zeek_anomaly_detector.py -f dataset/conn.log
+```
+Mount the local datasets to the container to run the zeek_anomaly_detector on them:
 
+```bash
+docker run -v /full/path/to/logs/:/zeek_anomaly_detector/dataset --rm -it stratosphereips/zeek_anomaly_detector:latest python3 zeek_anomaly_detector.py -f dataset/conn.log
+```
 
-# TODO
-- Add categorical data
-- filter flows that we don't want to treat
+### Source
+
+Please install the following dependencies:
+- zat: The ZAT Python package supports the processing and analysis of Zeek data with Pandas, scikit-learn, and Spark.
+- pyod: PyOD is a comprehensive and scalable Python toolkit for detecting outlying objects in multivariate data. 
+
+Install with pip:
+
+```bash
+pip install zat pyod
+```
