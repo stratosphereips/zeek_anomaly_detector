@@ -13,7 +13,7 @@ Using the PCA model the `zeek_anomaly_detector.py` is capable of training and te
 
 ## Usage
 ```bash
-$ time ./zeek_anomaly_detector.py -a 20 -f dataset/conn.log 
+$ time ./zeek_anomaly_detector.py -a 20 -f dataset/001-zeek-scenario-malicious/conn.log
 Simple Anomaly Detector for Zeek conn.log files. Version: 0.2
 Author: Sebastian Garcia (eldraco@gmail.com), Veronica Valeros (vero.valeros@gmail.com)
 
@@ -51,12 +51,12 @@ sys	0m0.581s
 
 The `zeek_anomaly_detector` has a public Docker image with the latest version:
 ```bash
-docker run --rm -it stratosphereips/zeek_anomaly_detector:latest python3 zeek_anomaly_detector.py -f dataset/conn.log
+docker run --rm -it stratosphereips/zeek_anomaly_detector:latest python3 zeek_anomaly_detector.py -f dataset/001-zeek-scenario-malicious/conn.log
 ```
 Mount the local datasets to the container to run the zeek_anomaly_detector on them:
 
 ```bash
-docker run -v /full/path/to/logs/:/zeek_anomaly_detector/dataset --rm -it stratosphereips/zeek_anomaly_detector:latest python3 zeek_anomaly_detector.py -f dataset/conn.log
+docker run -v /full/path/to/logs/:/zeek_anomaly_detector/dataset --rm -it stratosphereips/zeek_anomaly_detector:latest python3 zeek_anomaly_detector.py -f dataset/001-zeek-scenario-malicious/conn.log
 ```
 
 ### Source
