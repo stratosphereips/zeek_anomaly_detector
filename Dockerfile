@@ -9,7 +9,7 @@ RUN apt update && \
     apt install -y --no-install-recommends git && \
     apt clean
 
-COPY . ${DESTINATION_DIR}/
+RUN git clone --depth 1 --recurse-submodules https://github.com/stratosphereips/zeek_anomaly_detector.git ${DESTINATION_DIR}
 
 WORKDIR ${DESTINATION_DIR}
 
