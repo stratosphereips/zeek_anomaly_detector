@@ -70,3 +70,11 @@ Install with pip:
 ```bash
 pip install zat pyod
 ```
+
+## Contribute
+
+Create an issue or PR and we will process it.
+
+## Authors
+
+This project was created by Sebastian Garcia and Veronica Valeros at the Stratosphere Research Laboratory, AIC, FEE, Czech Technical University in Prague.
