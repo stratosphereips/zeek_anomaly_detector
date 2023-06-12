@@ -49,7 +49,6 @@ def detect(file, amountanom, realtime, dumptocsv):
     # 'normal', but we are not using this for detection
     bro_df['label'] = 'normal'
 
-
     # Replace the rows without data (with '-') with 0.
     # Even though this may add a bias in the algorithms,
     # is better than not using the lines.
@@ -76,7 +75,7 @@ def detect(file, amountanom, realtime, dumptocsv):
     X_train = bro_df[['duration', 'orig_bytes', 'id.resp_p', 'resp_bytes', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes']]
 
     # Our y is the label. But we are not using it now.
-    y = bro_df.label
+    # y = bro_df.label
 
     # The X_test is where we are going to search for anomalies. In our case, its the same set of data than X_train.
     X_test = X_train
@@ -127,10 +126,10 @@ def detect(file, amountanom, realtime, dumptocsv):
     # clf = KNN()
     # clf = KNN(n_neighbors=10)
     #################
-    
+
     # extract the value of dataframe to matrix
     X_train = X_train.values
-    
+
     # Fit the model to the train data
     clf.fit(X_train)
 
