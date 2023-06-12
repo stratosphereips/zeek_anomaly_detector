@@ -28,17 +28,6 @@ from pyod.models.pca import PCA
 # from pyod.models.knn import KNN   # kNN detector
 
 
-# This horrible hack is only to stop sklearn from printing those warnings
-def warn(*args, **kwargs):
-    """
-    A dummy function to avoid warning messages from sklearn.
-    """
-    pass
-
-
-warnings.warn = warn
-
-
 def detect(file, amountanom, realtime, dumptocsv):
     """
     Function to apply a very simple anomaly detector
