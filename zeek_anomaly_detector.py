@@ -188,12 +188,32 @@ if __name__ == '__main__':
 
     # Parse the parameters
     parser = argparse.ArgumentParser()
-    parser.add_argument('-v', '--verbose', help='Amount of verbosity. This shows more info about the results.', action='store', required=False, type=int)
-    parser.add_argument('-e', '--debug', help='Amount of debugging. This shows inner information about the program.', action='store', required=False, type=int)
-    parser.add_argument('-f', '--file', help='Path to the conn.log input file to read.', required=True)
-    parser.add_argument('-a', '--amountanom', help='Amount of anomalies to show.', required=False, default=10, type=int)
-    parser.add_argument('-R', '--realtime', help='Read the conn.log in real time.', required=False, type=bool, default=False)
-    parser.add_argument('-D', '--dumptocsv', help='Dump the conn.log DataFrame to a csv file', required=False)
+    parser.add_argument('-v', '--verbose',
+                        help='Amount of verbosity.',
+                        action='store',
+                        required=False,
+                        type=int)
+    parser.add_argument('-e', '--debug',
+                        help='Amount of debugging.',
+                        action='store',
+                        required=False,
+                        type=int)
+    parser.add_argument('-f', '--file',
+                        help='Zeek conn.log path.',
+                        required=True)
+    parser.add_argument('-a', '--amountanom',
+                        help='Amount of anomalies to show.',
+                        required=False,
+                        default=10,
+                        type=int)
+    parser.add_argument('-R', '--realtime',
+                        help='Read the conn.log in real time.',
+                        required=False,
+                        type=bool,
+                        default=False)
+    parser.add_argument('-D', '--dumptocsv',
+                        help='Dump the conn.log DataFrame to a csv file',
+                        required=False)
     args = parser.parse_args()
 
     detect(args.file, args.amountanom, args.realtime, args.dumptocsv)
