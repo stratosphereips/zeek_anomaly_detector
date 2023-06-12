@@ -87,7 +87,8 @@ def detect(file, amountanom, realtime, dumptocsv):
     # Our y is the label. But we are not using it now.
     # y = bro_df.label
 
-    # The X_test is where we are going to search for anomalies. In our case, its the same set of data than X_train.
+    # The X_test is where we are going to search for anomalies.
+    # In our case, its the same set of data than X_train.
     X_test = X_train
 
     #################
