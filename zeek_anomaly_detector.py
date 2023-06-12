@@ -148,8 +148,8 @@ def detect(file, amountanom, realtime, dumptocsv):
     pred_series = pd.Series(y_test_pred)
 
     # Now use the series to add a new column to the X test
-    x_test['score'] = scores_series.values
-    x_test['pred'] = pred_series.values
+    x_test.insert(loc=len(x_test.columns),column='score', value=scores_series.values)
+    x_test.insert(loc=len(x_test.columns),column='pred', value=pred_series.values)
 
     # Add the score to the bro_df also. So we can show it at the end
     bro_df['score'] = x_test['score']
