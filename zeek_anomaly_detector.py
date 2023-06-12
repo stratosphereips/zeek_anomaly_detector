@@ -2,10 +2,15 @@
 # This file is part of the Stratosphere Linux IPS
 # See the file 'LICENSE' for copying permission.
 # Authors:
-# - Sebastian Garcia. eldraco@gmail.com,
+# - Sebastian Garcia, eldraco@gmail.com,
 #   sebastian.garcia@agents.fel.cvut.cz
-# - Veronica Valeros. vero.valeros@gmail.com
+# - Veronica Valeros, vero.valeros@gmail.com
+"""
+Zeek Anomaly Detector by the Stratosphere Laboratory
+"""
 
+import argparse
+import warnings
 import pandas as pd
 # from sklearn.model_selection import train_test_split
 # from pyod.models import lof
@@ -22,12 +27,13 @@ from pyod.models.pca import PCA
 # from pyod.models.sos import SOS  # Needs keras
 # from pyod.models.xgbod import XGBOD # Needs keras
 # from pyod.models.knn import KNN   # kNN detector
-import argparse
-import warnings
 
 
 # This horrible hack is only to stop sklearn from printing those warnings
 def warn(*args, **kwargs):
+    """
+    A dummy function to avoid warning messages from sklearn.
+    """
     pass
 
 
@@ -42,13 +48,19 @@ def detect(file, amountanom, realtime, dumptocsv):
     """
 
     # Create a Pandas dataframe from the conn.log
-    bro_df = pd.read_csv(file, sep="\t", comment='#', names=['ts',  'uid', 'id.orig_h', 'id.orig_p', 'id.resp_h', 'id.resp_p', 'proto', 'service', 'duration',  'orig_bytes', 'resp_bytes', 'conn_state', 'local_orig', 'local_resp', 'missed_bytes',  'history', 'orig_pkts', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes', 'tunnel_parents'])
+    bro_df = pd.read_csv(file, sep="\t", comment='#',
+                         names=['ts', 'uid', 'id.orig_h', 'id.orig_p',
+                                'id.resp_h', 'id.resp_p', 'proto', 'service',
+                                'duration',  'orig_bytes', 'resp_bytes',
+                                'conn_state', 'local_orig', 'local_resp',
+                                'missed_bytes',  'history', 'orig_pkts',
+                                'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes',
+                                'tunnel_parents'])
 
     # In case you need a label, due to some models being able to work in a
     # semisupervized mode, then put it here. For now everything is
     # 'normal', but we are not using this for detection
     bro_df['label'] = 'normal'
-
 
     # Replace the rows without data (with '-') with 0.
     # Even though this may add a bias in the algorithms,
@@ -72,14 +84,18 @@ def detect(file, amountanom, realtime, dumptocsv):
     if dumptocsv != "None":
         bro_df.to_csv(dumptocsv)
 
-    # Add the columns from the log file that we know are numbers. This is only for conn.log files.
-    X_train = bro_df[['duration', 'orig_bytes', 'id.resp_p', 'resp_bytes', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes']]
+    # Add the columns from the log file that we know are numbers.
+    # This is only for conn.log files.
+    x_train = bro_df[['duration', 'orig_bytes', 'id.resp_p',
+                      'resp_bytes', 'orig_ip_bytes', 'resp_pkts',
+                      'resp_ip_bytes']]
 
     # Our y is the label. But we are not using it now.
-    y = bro_df.label
+    # y = bro_df.label
 
-    # The X_test is where we are going to search for anomalies. In our case, its the same set of data than X_train.
-    X_test = X_train
+    # The x_test is where we are going to search for anomalies.
+    # In our case, its the same set of data than x_train.
+    x_test = x_train
 
     #################
     # Select a model from below
@@ -127,57 +143,84 @@ def detect(file, amountanom, realtime, dumptocsv):
     # clf = KNN()
     # clf = KNN(n_neighbors=10)
     #################
-    
+
     # extract the value of dataframe to matrix
-    X_train = X_train.values
-    
+    x_train = x_train.values
+
     # Fit the model to the train data
-    clf.fit(X_train)
+    clf.fit(x_train)
 
     # get the prediction on the test data
-    y_test_pred = clf.predict(X_test)  # outlier labels (0 or 1)
+    y_test_pred = clf.predict(x_test)  # outlier labels (0 or 1)
 
-    y_test_scores = clf.decision_function(X_test)  # outlier scores
+    y_test_scores = clf.decision_function(x_test)  # outlier scores
 
     # Convert the ndarrays of scores and predictions to  pandas series
     scores_series = pd.Series(y_test_scores)
     pred_series = pd.Series(y_test_pred)
 
     # Now use the series to add a new column to the X test
-    X_test['score'] = scores_series.values
-    X_test['pred'] = pred_series.values
+    x_test['score'] = scores_series.values
+    x_test['pred'] = pred_series.values
 
     # Add the score to the bro_df also. So we can show it at the end
-    bro_df['score'] = X_test['score']
+    bro_df['score'] = x_test['score']
 
-    # Keep the positive predictions only. That is, keep only what we predict is an anomaly.
-    X_test_predicted = X_test[X_test.pred == 1]
+    # Keep the positive predictions only.
+    # That is, keep only what we predict is an anomaly.
+    x_test_predicted = x_test[x_test.pred == 1]
 
     # Keep the top X amount of anomalies
-    top10 = X_test_predicted.sort_values(by='score', ascending=False).iloc[:amountanom]
+    top10 = x_test_predicted.sort_values(by='score',
+                                         ascending=False).iloc[:amountanom]
 
     # Print the results
-    # Find the predicted anomalies in the original bro dataframe, where the rest of the data is
+    # Find the predicted anomalies in the original bro dataframe,
+    # where the rest of the data is
     df_to_print = bro_df.iloc[top10.index]
     print('\nFlows of the top anomalies')
 
     # Only print some columns, not all, so its easier to read.
-    df_to_print = df_to_print.drop(['conn_state', 'history', 'local_orig', 'local_resp', 'missed_bytes', 'ts', 'tunnel_parents', 'uid', 'label'], axis=1)
+    df_to_print = df_to_print.drop(['conn_state', 'history', 'local_orig',
+                                    'local_resp', 'missed_bytes', 'ts',
+                                    'tunnel_parents', 'uid', 'label'], axis=1)
     print(df_to_print)
 
 
 if __name__ == '__main__':
-    print('Simple Anomaly Detector for Zeek conn.log files. Version: 0.2')
-    print('Author: Sebastian Garcia (eldraco@gmail.com), Veronica Valeros (vero.valeros@gmail.com)')
+    print('Zeek Anomaly Detector: a simple anomaly detector \
+for Zeek conn.log files.')
+    print('Author: Sebastian Garcia (eldraco@gmail.com)')
+    print('        Veronica Valeros (vero.valeros@gmail.com)')
 
     # Parse the parameters
     parser = argparse.ArgumentParser()
-    parser.add_argument('-v', '--verbose', help='Amount of verbosity. This shows more info about the results.', action='store', required=False, type=int)
-    parser.add_argument('-e', '--debug', help='Amount of debugging. This shows inner information about the program.', action='store', required=False, type=int)
-    parser.add_argument('-f', '--file', help='Path to the conn.log input file to read.', required=True)
-    parser.add_argument('-a', '--amountanom', help='Amount of anomalies to show.', required=False, default=10, type=int)
-    parser.add_argument('-R', '--realtime', help='Read the conn.log in real time.', required=False, type=bool, default=False)
-    parser.add_argument('-D', '--dumptocsv', help='Dump the conn.log DataFrame to a csv file', required=False)
+    parser.add_argument('-v', '--verbose',
+                        help='Amount of verbosity.',
+                        action='store',
+                        required=False,
+                        type=int)
+    parser.add_argument('-e', '--debug',
+                        help='Amount of debugging.',
+                        action='store',
+                        required=False,
+                        type=int)
+    parser.add_argument('-f', '--file',
+                        help='Zeek conn.log path.',
+                        required=True)
+    parser.add_argument('-a', '--amountanom',
+                        help='Amount of anomalies to show.',
+                        required=False,
+                        default=10,
+                        type=int)
+    parser.add_argument('-R', '--realtime',
+                        help='Read the conn.log in real time.',
+                        required=False,
+                        type=bool,
+                        default=False)
+    parser.add_argument('-D', '--dumptocsv',
+                        help='Dump the conn.log DataFrame to a csv file',
+                        required=False)
     args = parser.parse_args()
 
     detect(args.file, args.amountanom, args.realtime, args.dumptocsv)
