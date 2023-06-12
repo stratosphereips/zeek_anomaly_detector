@@ -10,8 +10,8 @@ Zeek Anomaly Detector by the Stratosphere Laboratory
 """
 
 import argparse
-import warnings
 import pandas as pd
+from pyod.models.pca import PCA
 # from sklearn.model_selection import train_test_split
 # from pyod.models import lof
 # from pyod.models.abod import ABOD
@@ -21,7 +21,6 @@ import pandas as pd
 # from pyod.models.lscp import LSCP
 # from pyod.models.mcd import MCD
 # from pyod.models.ocsvm import OCSVM
-from pyod.models.pca import PCA
 # from pyod.models.sod import SOD
 # from pyod.models.so_gaal import SO_GAAL # Needs keras
 # from pyod.models.sos import SOS  # Needs keras
