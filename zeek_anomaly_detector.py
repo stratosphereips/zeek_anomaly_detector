@@ -175,7 +175,9 @@ def detect(file, amountanom, realtime, dumptocsv):
     print('\nFlows of the top anomalies')
 
     # Only print some columns, not all, so its easier to read.
-    df_to_print = df_to_print.drop(['conn_state', 'history', 'local_orig', 'local_resp', 'missed_bytes', 'ts', 'tunnel_parents', 'uid', 'label'], axis=1)
+    df_to_print = df_to_print.drop(['conn_state', 'history', 'local_orig',
+                                    'local_resp', 'missed_bytes', 'ts',
+                                    'tunnel_parents', 'uid', 'label'], axis=1)
     print(df_to_print)
 
 
