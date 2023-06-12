@@ -2,9 +2,12 @@
 # This file is part of the Stratosphere Linux IPS
 # See the file 'LICENSE' for copying permission.
 # Authors:
-# - Sebastian Garcia. eldraco@gmail.com,
+# - Sebastian Garcia, eldraco@gmail.com,
 #   sebastian.garcia@agents.fel.cvut.cz
-# - Veronica Valeros. vero.valeros@gmail.com
+# - Veronica Valeros, vero.valeros@gmail.com
+"""
+Zeek Anomaly Detector by the Stratosphere Laboratory
+"""
 
 import pandas as pd
 # from sklearn.model_selection import train_test_split
