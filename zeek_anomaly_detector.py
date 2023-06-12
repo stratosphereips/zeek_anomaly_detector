@@ -42,7 +42,14 @@ def detect(file, amountanom, realtime, dumptocsv):
     """
 
     # Create a Pandas dataframe from the conn.log
-    bro_df = pd.read_csv(file, sep="\t", comment='#', names=['ts',  'uid', 'id.orig_h', 'id.orig_p', 'id.resp_h', 'id.resp_p', 'proto', 'service', 'duration',  'orig_bytes', 'resp_bytes', 'conn_state', 'local_orig', 'local_resp', 'missed_bytes',  'history', 'orig_pkts', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes', 'tunnel_parents'])
+    bro_df = pd.read_csv(file, sep="\t", comment='#',
+                         names=['ts', 'uid', 'id.orig_h', 'id.orig_p',
+                                'id.resp_h', 'id.resp_p', 'proto', 'service',
+                                'duration',  'orig_bytes', 'resp_bytes',
+                                'conn_state', 'local_orig', 'local_resp',
+                                'missed_bytes',  'history', 'orig_pkts',
+                                'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes',
+                                'tunnel_parents'])
 
     # In case you need a label, due to some models being able to work in a
     # semisupervized mode, then put it here. For now everything is
