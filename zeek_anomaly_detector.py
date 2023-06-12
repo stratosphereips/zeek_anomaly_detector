@@ -31,6 +31,9 @@ import warnings
 
 # This horrible hack is only to stop sklearn from printing those warnings
 def warn(*args, **kwargs):
+"""
+A dummy function to avoid warning messages from sklearn.
+"""
     pass
 
 
