@@ -169,7 +169,8 @@ def detect(file, amountanom, realtime, dumptocsv):
                                          ascending=False).iloc[:amountanom]
 
     # Print the results
-    # Find the predicted anomalies in the original bro dataframe, where the rest of the data is
+    # Find the predicted anomalies in the original bro dataframe,
+    # where the rest of the data is
     df_to_print = bro_df.iloc[top10.index]
     print('\nFlows of the top anomalies')
 
