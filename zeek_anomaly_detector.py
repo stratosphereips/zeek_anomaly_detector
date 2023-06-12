@@ -71,8 +71,11 @@ def detect(file, amountanom, realtime, dumptocsv):
     if dumptocsv != "None":
         bro_df.to_csv(dumptocsv)
 
-    # Add the columns from the log file that we know are numbers. This is only for conn.log files.
-    X_train = bro_df[['duration', 'orig_bytes', 'id.resp_p', 'resp_bytes', 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes']]
+    # Add the columns from the log file that we know are numbers.
+    # This is only for conn.log files.
+    X_train = bro_df[['duration', 'orig_bytes', 'id.resp_p',
+                      'resp_bytes', 'orig_ip_bytes', 'resp_pkts',
+                      'resp_ip_bytes']]
 
     # Our y is the label. But we are not using it now.
     # y = bro_df.label
