@@ -28,11 +28,10 @@ from pyod.models.pca import PCA
 # from pyod.models.knn import KNN   # kNN detector
 
 
-def detect(file, amountanom, realtime, dumptocsv):
+def detect(file, amountanom, dumptocsv):
     """
     Function to apply a very simple anomaly detector
     amountanom: The top number of anomalies we want to print
-    realtime: If we want to read the conn.log file in real time (not working)
     """
 
     # Create a Pandas dataframe from the conn.log
@@ -201,14 +200,9 @@ for Zeek conn.log files.')
                         required=False,
                         default=10,
                         type=int)
-    parser.add_argument('-R', '--realtime',
-                        help='Read the conn.log in real time.',
-                        required=False,
-                        type=bool,
-                        default=False)
     parser.add_argument('-D', '--dumptocsv',
                         help='Dump the conn.log DataFrame to a csv file',
                         required=False)
     args = parser.parse_args()
 
-    detect(args.file, args.amountanom, args.realtime, args.dumptocsv)
+    detect(args.file, args.amountanom, args.dumptocsv)
