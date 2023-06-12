@@ -190,7 +190,7 @@ def detect(file, amountanom, realtime, dumptocsv):
 if __name__ == '__main__':
     print('Zeek Anomaly Detector: a simple anomaly detector \
 for Zeek conn.log files.')
-    print('Author: Sebastian Garcia (eldraco@gmail.com))')
+    print('Author: Sebastian Garcia (eldraco@gmail.com)')
     print('        Veronica Valeros (vero.valeros@gmail.com)')
 
     # Parse the parameters
