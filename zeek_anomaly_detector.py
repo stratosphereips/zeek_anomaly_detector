@@ -9,6 +9,8 @@
 Zeek Anomaly Detector by the Stratosphere Laboratory
 """
 
+import argparse
+import warnings
 import pandas as pd
 # from sklearn.model_selection import train_test_split
 # from pyod.models import lof
@@ -25,8 +27,6 @@ from pyod.models.pca import PCA
 # from pyod.models.sos import SOS  # Needs keras
 # from pyod.models.xgbod import XGBOD # Needs keras
 # from pyod.models.knn import KNN   # kNN detector
-import argparse
-import warnings
 
 
 # This horrible hack is only to stop sklearn from printing those warnings
