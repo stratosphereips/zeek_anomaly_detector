@@ -183,7 +183,8 @@ def detect(file, amountanom, realtime, dumptocsv):
 
 if __name__ == '__main__':
     print('Simple Anomaly Detector for Zeek conn.log files. Version: 0.2')
-    print('Author: Sebastian Garcia (eldraco@gmail.com), Veronica Valeros (vero.valeros@gmail.com)')
+    print('Author: Sebastian Garcia (eldraco@gmail.com))')
+    print('        Veronica Valeros (vero.valeros@gmail.com)')
 
     # Parse the parameters
     parser = argparse.ArgumentParser()
