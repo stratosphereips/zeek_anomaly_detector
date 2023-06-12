@@ -10,8 +10,8 @@ Zeek Anomaly Detector by the Stratosphere Laboratory
 """
 
 import argparse
-import warnings
 import pandas as pd
+from pyod.models.pca import PCA
 # from sklearn.model_selection import train_test_split
 # from pyod.models import lof
 # from pyod.models.abod import ABOD
@@ -21,7 +21,6 @@ import pandas as pd
 # from pyod.models.lscp import LSCP
 # from pyod.models.mcd import MCD
 # from pyod.models.ocsvm import OCSVM
-from pyod.models.pca import PCA
 # from pyod.models.sod import SOD
 # from pyod.models.so_gaal import SO_GAAL # Needs keras
 # from pyod.models.sos import SOS  # Needs keras
@@ -29,22 +28,10 @@ from pyod.models.pca import PCA
 # from pyod.models.knn import KNN   # kNN detector
 
 
-# This horrible hack is only to stop sklearn from printing those warnings
-def warn(*args, **kwargs):
-    """
-    A dummy function to avoid warning messages from sklearn.
-    """
-    pass
-
-
-warnings.warn = warn
-
-
-def detect(file, amountanom, realtime, dumptocsv):
+def detect(file, amountanom, dumptocsv):
     """
     Function to apply a very simple anomaly detector
     amountanom: The top number of anomalies we want to print
-    realtime: If we want to read the conn.log file in real time (not working)
     """
 
     # Create a Pandas dataframe from the conn.log
@@ -160,8 +147,8 @@ def detect(file, amountanom, realtime, dumptocsv):
     pred_series = pd.Series(y_test_pred)
 
     # Now use the series to add a new column to the X test
-    x_test['score'] = scores_series.values
-    x_test['pred'] = pred_series.values
+    x_test.insert(loc=len(x_test.columns),column='score', value=scores_series.values)
+    x_test.insert(loc=len(x_test.columns),column='pred', value=pred_series.values)
 
     # Add the score to the bro_df also. So we can show it at the end
     bro_df['score'] = x_test['score']
@@ -213,14 +200,9 @@ for Zeek conn.log files.')
                         required=False,
                         default=10,
                         type=int)
-    parser.add_argument('-R', '--realtime',
-                        help='Read the conn.log in real time.',
-                        required=False,
-                        type=bool,
-                        default=False)
     parser.add_argument('-D', '--dumptocsv',
                         help='Dump the conn.log DataFrame to a csv file',
                         required=False)
     args = parser.parse_args()
 
-    detect(args.file, args.amountanom, args.realtime, args.dumptocsv)
+    detect(args.file, args.amountanom, args.dumptocsv)
