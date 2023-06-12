@@ -86,16 +86,16 @@ def detect(file, amountanom, realtime, dumptocsv):
 
     # Add the columns from the log file that we know are numbers.
     # This is only for conn.log files.
-    X_train = bro_df[['duration', 'orig_bytes', 'id.resp_p',
+    x_train = bro_df[['duration', 'orig_bytes', 'id.resp_p',
                       'resp_bytes', 'orig_ip_bytes', 'resp_pkts',
                       'resp_ip_bytes']]
 
     # Our y is the label. But we are not using it now.
     # y = bro_df.label
 
-    # The X_test is where we are going to search for anomalies.
-    # In our case, its the same set of data than X_train.
-    X_test = X_train
+    # The x_test is where we are going to search for anomalies.
+    # In our case, its the same set of data than x_train.
+    x_test = x_train
 
     #################
     # Select a model from below
@@ -145,33 +145,33 @@ def detect(file, amountanom, realtime, dumptocsv):
     #################
 
     # extract the value of dataframe to matrix
-    X_train = X_train.values
+    x_train = x_train.values
 
     # Fit the model to the train data
-    clf.fit(X_train)
+    clf.fit(x_train)
 
     # get the prediction on the test data
-    y_test_pred = clf.predict(X_test)  # outlier labels (0 or 1)
+    y_test_pred = clf.predict(x_test)  # outlier labels (0 or 1)
 
-    y_test_scores = clf.decision_function(X_test)  # outlier scores
+    y_test_scores = clf.decision_function(x_test)  # outlier scores
 
     # Convert the ndarrays of scores and predictions to  pandas series
     scores_series = pd.Series(y_test_scores)
     pred_series = pd.Series(y_test_pred)
 
     # Now use the series to add a new column to the X test
-    X_test['score'] = scores_series.values
-    X_test['pred'] = pred_series.values
+    x_test['score'] = scores_series.values
+    x_test['pred'] = pred_series.values
 
     # Add the score to the bro_df also. So we can show it at the end
-    bro_df['score'] = X_test['score']
+    bro_df['score'] = x_test['score']
 
     # Keep the positive predictions only.
     # That is, keep only what we predict is an anomaly.
-    X_test_predicted = X_test[X_test.pred == 1]
+    x_test_predicted = x_test[x_test.pred == 1]
 
     # Keep the top X amount of anomalies
-    top10 = X_test_predicted.sort_values(by='score',
+    top10 = x_test_predicted.sort_values(by='score',
                                          ascending=False).iloc[:amountanom]
 
     # Print the results
