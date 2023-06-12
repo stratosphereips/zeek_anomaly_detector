@@ -160,11 +160,13 @@ def detect(file, amountanom, realtime, dumptocsv):
     # Add the score to the bro_df also. So we can show it at the end
     bro_df['score'] = X_test['score']
 
-    # Keep the positive predictions only. That is, keep only what we predict is an anomaly.
+    # Keep the positive predictions only.
+    # That is, keep only what we predict is an anomaly.
     X_test_predicted = X_test[X_test.pred == 1]
 
     # Keep the top X amount of anomalies
-    top10 = X_test_predicted.sort_values(by='score', ascending=False).iloc[:amountanom]
+    top10 = X_test_predicted.sort_values(by='score',
+                                         ascending=False).iloc[:amountanom]
 
     # Print the results
     # Find the predicted anomalies in the original bro dataframe, where the rest of the data is
