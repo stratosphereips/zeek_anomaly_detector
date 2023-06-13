@@ -1,5 +1,6 @@
 # zeek_anomaly_detector
 [![Docker Image CI](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/docker-image.yml/badge.svg)](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/docker-image.yml)
+[![Python Checks](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/python-checks.yml/badge.svg)](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/python-checks.yml)
 ![GitHub last commit (branch)](https://img.shields.io/github/last-commit/stratosphereips/zeek_anomaly_detector/main?color=green)
 ![Docker Pulls](https://img.shields.io/docker/pulls/stratosphereips/zeek_anomaly_detector?color=green)
 
