@@ -1,2 +1,3 @@
-zat
-pyod
+zat==0.4.7
+pyod==1.1.3
+tqdm==4.66.4
