@@ -1,6 +1,7 @@
 # zeek_anomaly_detector
 [![Docker Image CI](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/docker-image.yml/badge.svg)](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/docker-image.yml)
 [![Python Checks](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/python-checks.yml/badge.svg)](https://github.com/stratosphereips/zeek_anomaly_detector/actions/workflows/python-checks.yml)
+![Python](https://img.shields.io/badge/Python-3.8-brightgreen.svg) 
 ![GitHub last commit (branch)](https://img.shields.io/github/last-commit/stratosphereips/zeek_anomaly_detector/main?color=green)
 ![Docker Pulls](https://img.shields.io/docker/pulls/stratosphereips/zeek_anomaly_detector?color=green)
 
@@ -68,8 +69,11 @@ Please install the following dependencies:
 
 Install with pip:
 
-```bash
-pip install zat pyod
+```
+# install with right versions
+pip3 install -r requirements.txt
+# real time detection
+python3 zeek_anomaly_detector.py -R True -f {conn.log location}
 ```
 
 ## Contribute
