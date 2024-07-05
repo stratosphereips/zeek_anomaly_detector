@@ -8,10 +8,19 @@
 """
 Zeek Anomaly Detector by the Stratosphere Laboratory
 """
-
+import sys
+from pathlib import Path
+sys.path.insert(0, Path(sys.path[0]).parent.as_posix())
+import config
+from zat.log_to_dataframe import LogToDataFrame
+from zat import live_simulator, dataframe_cache
 import argparse
 import pandas as pd
 from pyod.models.pca import PCA
+from io import StringIO
+from tqdm import tqdm
+import time
+
 # from sklearn.model_selection import train_test_split
 # from pyod.models import lof
 # from pyod.models.abod import ABOD
@@ -27,45 +36,26 @@ from pyod.models.pca import PCA
 # from pyod.models.xgbod import XGBOD # Needs keras
 # from pyod.models.knn import KNN   # kNN detector
 
+def data_conv(bro_df):
+    columns_to_conv = ["orig_bytes", "resp_bytes", "resp_pkts", "orig_ip_bytes", "resp_ip_bytes"]
+    for column in tqdm(columns_to_conv, total=len(columns_to_conv), desc="replace - and change data type"):
+        bro_df[column].replace('-', '0', inplace=True)
+        bro_df[column] = bro_df[column].fillna(0).astype("int32") 
 
-def detect(file, amountanom, dumptocsv):
-    """
-    Function to apply a very simple anomaly detector
-    amountanom: The top number of anomalies we want to print
-    """
+    bro_df['duration'].replace('-', '0', inplace=True)
+    bro_df['duration'] = bro_df['duration'].apply(lambda x:x.total_seconds()).fillna(0).astype('float64')
 
-    # Create a Pandas dataframe from the conn.log
-    bro_df = pd.read_csv(file, sep="\t", comment='#',
-                         names=['ts', 'uid', 'id.orig_h', 'id.orig_p',
-                                'id.resp_h', 'id.resp_p', 'proto', 'service',
-                                'duration',  'orig_bytes', 'resp_bytes',
-                                'conn_state', 'local_orig', 'local_resp',
-                                'missed_bytes',  'history', 'orig_pkts',
-                                'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes',
-                                'tunnel_parents'])
+    return bro_df
 
-    # In case you need a label, due to some models being able to work in a
-    # semisupervized mode, then put it here. For now everything is
-    # 'normal', but we are not using this for detection
-    bro_df['label'] = 'normal'
-
+def train(bro_df, dumptocsv):
+    ''' specify classifier
+    
+    '''
     # Replace the rows without data (with '-') with 0.
     # Even though this may add a bias in the algorithms,
     # is better than not using the lines.
     # Also fill the no values with 0
     # Finally put a type to each column
-    bro_df['orig_bytes'].replace('-', '0', inplace=True)
-    bro_df['orig_bytes'] = bro_df['orig_bytes'].fillna(0).astype('int32')
-    bro_df['resp_bytes'].replace('-', '0', inplace=True)
-    bro_df['resp_bytes'] = bro_df['resp_bytes'].fillna(0).astype('int32')
-    bro_df['resp_pkts'].replace('-', '0', inplace=True)
-    bro_df['resp_pkts'] = bro_df['resp_pkts'].fillna(0).astype('int32')
-    bro_df['orig_ip_bytes'].replace('-', '0', inplace=True)
-    bro_df['orig_ip_bytes'] = bro_df['orig_ip_bytes'].fillna(0).astype('int32')
-    bro_df['resp_ip_bytes'].replace('-', '0', inplace=True)
-    bro_df['resp_ip_bytes'] = bro_df['resp_ip_bytes'].fillna(0).astype('int32')
-    bro_df['duration'].replace('-', '0', inplace=True)
-    bro_df['duration'] = bro_df['duration'].fillna(0).astype('float64')
 
     # Save dataframe to disk as CSV
     if dumptocsv != "None":
@@ -74,9 +64,10 @@ def detect(file, amountanom, dumptocsv):
     # Add the columns from the log file that we know are numbers.
     # This is only for conn.log files.
     x_train = bro_df[['duration', 'orig_bytes', 'id.resp_p',
-                      'resp_bytes', 'orig_ip_bytes', 'resp_pkts',
-                      'resp_ip_bytes']]
+                    'resp_bytes', 'orig_ip_bytes', 'resp_pkts',
+                    'resp_ip_bytes']]
 
+    
     # Our y is the label. But we are not using it now.
     # y = bro_df.label
 
@@ -130,10 +121,8 @@ def detect(file, amountanom, dumptocsv):
     # clf = KNN()
     # clf = KNN(n_neighbors=10)
     #################
-
     # extract the value of dataframe to matrix
     x_train = x_train.values
-
     # Fit the model to the train data
     clf.fit(x_train)
 
@@ -150,6 +139,9 @@ def detect(file, amountanom, dumptocsv):
     x_test.insert(loc=len(x_test.columns),column='score', value=scores_series.values)
     x_test.insert(loc=len(x_test.columns),column='pred', value=pred_series.values)
 
+    return x_test
+    
+def res_print(bro_df, amountanom, x_test):
     # Add the score to the bro_df also. So we can show it at the end
     bro_df['score'] = x_test['score']
 
@@ -172,6 +164,48 @@ def detect(file, amountanom, dumptocsv):
                                     'local_resp', 'missed_bytes', 'ts',
                                     'tunnel_parents', 'uid', 'label'], axis=1)
     print(df_to_print)
+
+
+
+def detect(file, amountanom, dumptocsv, realtime:bool):
+    """
+    Function to apply a very simple anomaly detector
+    :param amountanom: the top number of anomalies we want to print
+    :param dumptocsw: whether to save csv to disk
+    :param realtime: whether in real-time processing mode
+    """
+    if not realtime:
+        file = Path.cwd().joinpath(file)
+        log_to_df = LogToDataFrame()
+        # Create a Pandas dataframe from the conn.log
+        bro_df = log_to_df.create_dataframe(file, ts_index=False)
+        names = config.columns["conn"]
+        bro_df = bro_df[names]
+        # In case you need a label, due to some models being able to work in a
+        # semisupervized mode, then put it here. For now everything is
+        # 'normal', but we are not using this for detection
+        # bro_df['label'] = 'normal'
+        bro_df['label'] = "normal"
+
+        bro_df = data_conv(bro_df)
+        x_test  = train(bro_df, dumptocsv)
+        res_print(bro_df, amountanom, x_test)
+
+    else:
+        # define the Events Per Second to emit events
+        data_stream = live_simulator.LiveSimulator(file, eps=config.eps)
+        # create cache dataframe within certain max time period 
+        df_cache = dataframe_cache.DataFrameCache(max_cache_time=config.max_cache_time)
+        time_delta = 10
+        timer = time.time() + time_delta                                   
+        for line in data_stream.rows():
+            df_cache.add_row(line)
+            if time.time() > timer:
+                bro_df = df_cache.dataframe()
+                bro_df = data_conv(bro_df)
+                bro_df['label'] = "normal"
+                x_test  = train(bro_df, dumptocsv)
+                res_print(bro_df, amountanom, x_test)
 
 
 if __name__ == '__main__':
@@ -203,6 +237,13 @@ for Zeek conn.log files.')
     parser.add_argument('-D', '--dumptocsv',
                         help='Dump the conn.log DataFrame to a csv file',
                         required=False)
+    
+    parser.add_argument('-R', '--realtime',
+                        help='Read the conn.log in real time.',
+                        required=False,
+                        type=bool,
+                        default=False)
+    
     args = parser.parse_args()
 
-    detect(args.file, args.amountanom, args.dumptocsv)
+    detect(args.file, args.amountanom, args.dumptocsv, args.realtime)
