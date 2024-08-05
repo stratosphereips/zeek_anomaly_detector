@@ -63,13 +63,12 @@ docker run -v /full/path/to/logs/:/zeek_anomaly_detector/dataset --rm -it strato
 ### Source
 
 Please install the following dependencies:
-- zat: The ZAT Python package supports the processing and analysis of Zeek data with Pandas, scikit-learn, and Spark.
 - pyod: PyOD is a comprehensive and scalable Python toolkit for detecting outlying objects in multivariate data. 
 
 Install with pip:
 
 ```bash
-pip install zat pyod
+pip install pyod
 ```
 
 ## Contribute
