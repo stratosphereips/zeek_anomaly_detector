@@ -54,18 +54,30 @@ def detect(file, amountanom, dumptocsv):
     # is better than not using the lines.
     # Also fill the no values with 0
     # Finally put a type to each column
-    bro_df['orig_bytes'].replace('-', '0', inplace=True)
+    bro_df.replace({'orig_bytes': '-'}, '0', inplace=True)
+    bro_df['orig_bytes'] = pd.to_numeric(bro_df['orig_bytes'], errors='coerce')
     bro_df['orig_bytes'] = bro_df['orig_bytes'].fillna(0).astype('int32')
-    bro_df['resp_bytes'].replace('-', '0', inplace=True)
+
+    bro_df.replace({'resp_bytes': '-'}, '0', inplace=True)
+    bro_df['resp_bytes'] = pd.to_numeric(bro_df['resp_bytes'], errors='coerce')
     bro_df['resp_bytes'] = bro_df['resp_bytes'].fillna(0).astype('int32')
-    bro_df['resp_pkts'].replace('-', '0', inplace=True)
+
+    bro_df.replace({'resp_pkts': '-'}, '0', inplace=True)
+    bro_df['resp_pkts'] = pd.to_numeric(bro_df['resp_pkts'], errors='coerce')
     bro_df['resp_pkts'] = bro_df['resp_pkts'].fillna(0).astype('int32')
-    bro_df['orig_ip_bytes'].replace('-', '0', inplace=True)
+
+    bro_df.replace({'orig_ip_bytes': '-'}, '0', inplace=True)
+    bro_df['orig_ip_bytes'] = pd.to_numeric(bro_df['orig_ip_bytes'], errors='coerce')
     bro_df['orig_ip_bytes'] = bro_df['orig_ip_bytes'].fillna(0).astype('int32')
-    bro_df['resp_ip_bytes'].replace('-', '0', inplace=True)
+
+    bro_df.replace({'resp_ip_bytes': '-'}, '0', inplace=True)
+    bro_df['resp_ip_bytes'] = pd.to_numeric(bro_df['resp_ip_bytes'], errors='coerce')
     bro_df['resp_ip_bytes'] = bro_df['resp_ip_bytes'].fillna(0).astype('int32')
-    bro_df['duration'].replace('-', '0', inplace=True)
+
+    bro_df.replace({'duration': '-'}, '0', inplace=True)
+    bro_df['duration'] = pd.to_numeric(bro_df['duration'], errors='coerce')
     bro_df['duration'] = bro_df['duration'].fillna(0).astype('float64')
+
 
     # Save dataframe to disk as CSV
     if dumptocsv != "None":
