@@ -42,7 +42,7 @@ def detect(file, amountanom, dumptocsv):
                                 'conn_state', 'local_orig', 'local_resp',
                                 'missed_bytes',  'history', 'orig_pkts',
                                 'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes',
-                                'tunnel_parents'])
+                                'tunnel_parents', 'ip_proto'])
 
     # In case you need a label, due to some models being able to work in a
     # semisupervized mode, then put it here. For now everything is
