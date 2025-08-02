@@ -62,6 +62,11 @@ docker run -v /full/path/to/logs/:/zeek_anomaly_detector/dataset --rm -it strato
 
 ### Source
 
+Clone the repository with the submodules:
+```
+git clone --recurse-submodules --remote-submodules https://github.com/stratosphereips/zeek_anomaly_detector
+```
+
 Please install the following dependencies:
 - pyod: PyOD is a comprehensive and scalable Python toolkit for detecting outlying objects in multivariate data. 
 
