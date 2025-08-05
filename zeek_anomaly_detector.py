@@ -87,7 +87,7 @@ def detect(file, amountanom, dumptocsv):
     # This is only for conn.log files.
     x_train = bro_df[['duration', 'orig_bytes', 'id.resp_p',
                       'resp_bytes', 'orig_ip_bytes', 'resp_pkts',
-                      'resp_ip_bytes']]
+                      'resp_ip_bytes', 'ip_proto']]
 
     # Our y is the label. But we are not using it now.
     # y = bro_df.label
