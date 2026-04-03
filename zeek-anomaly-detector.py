@@ -671,17 +671,76 @@ def build_arp_features(df, context):
 def build_stats_features(df, context):
     del context
     features = pd.DataFrame(index=df.index)
-    numeric_columns = [
-        'mem', 'pkts_proc', 'bytes_recv', 'events_proc', 'events_queued',
-        'active_tcp_conns', 'active_udp_conns', 'active_icmp_conns',
-        'tcp_conns', 'udp_conns', 'icmp_conns', 'timers', 'active_timers',
-        'files', 'active_files', 'dns_requests', 'active_dns_requests',
-        'reassem_tcp_size', 'reassem_file_size', 'reassem_frag_size',
-        'reassem_unknown_size'
-    ]
-    for column in numeric_columns:
-        if column in df.columns:
-            features[column] = numeric_series(df, column)
+    ts = numeric_series(df, 'ts')
+    mem = numeric_series(df, 'mem')
+    pkts_proc = numeric_series(df, 'pkts_proc')
+    bytes_recv = numeric_series(df, 'bytes_recv')
+    events_proc = numeric_series(df, 'events_proc')
+    events_queued = numeric_series(df, 'events_queued')
+    active_tcp = numeric_series(df, 'active_tcp_conns')
+    active_udp = numeric_series(df, 'active_udp_conns')
+    active_icmp = numeric_series(df, 'active_icmp_conns')
+    tcp_conns = numeric_series(df, 'tcp_conns')
+    udp_conns = numeric_series(df, 'udp_conns')
+    icmp_conns = numeric_series(df, 'icmp_conns')
+    timers = numeric_series(df, 'timers')
+    active_timers = numeric_series(df, 'active_timers')
+    files = numeric_series(df, 'files')
+    active_files = numeric_series(df, 'active_files')
+    dns_requests = numeric_series(df, 'dns_requests')
+    active_dns_requests = numeric_series(df, 'active_dns_requests')
+    reassem_tcp = numeric_series(df, 'reassem_tcp_size')
+    reassem_file = numeric_series(df, 'reassem_file_size')
+    reassem_frag = numeric_series(df, 'reassem_frag_size')
+    reassem_unknown = numeric_series(df, 'reassem_unknown_size')
+
+    total_active_conns = active_tcp + active_udp + active_icmp
+    total_conns = tcp_conns + udp_conns + icmp_conns
+    total_reassembly = reassem_tcp + reassem_file + reassem_frag + reassem_unknown
+    ts_delta = ts.diff().fillna(0.0)
+
+    # Absolute workload size still matters, but ratios and growth are more meaningful.
+    features['mem'] = mem
+    features['events_queued'] = events_queued
+    features['active_conns'] = total_active_conns
+    features['active_files'] = active_files
+    features['active_dns_requests'] = active_dns_requests
+    features['total_reassembly'] = total_reassembly
+
+    # Workload shape ratios
+    features['bytes_per_packet'] = safe_divide(bytes_recv, pkts_proc)
+    features['events_per_packet'] = safe_divide(events_proc, pkts_proc)
+    features['queued_to_processed_ratio'] = safe_divide(events_queued, events_proc + 1)
+    features['active_to_total_conn_ratio'] = safe_divide(total_active_conns, total_conns + 1)
+    features['tcp_share'] = safe_divide(tcp_conns, total_conns + 1)
+    features['udp_share'] = safe_divide(udp_conns, total_conns + 1)
+    features['icmp_share'] = safe_divide(icmp_conns, total_conns + 1)
+    features['files_per_conn'] = safe_divide(files, tcp_conns + 1)
+    features['active_files_per_conn'] = safe_divide(active_files, total_active_conns + 1)
+    features['dns_per_udp_conn'] = safe_divide(dns_requests, udp_conns + 1)
+    features['active_dns_pressure'] = safe_divide(active_dns_requests, dns_requests + 1)
+    features['reassembly_per_tcp_conn'] = safe_divide(total_reassembly, tcp_conns + 1)
+    features['timer_pressure'] = safe_divide(active_timers, timers + 1)
+    features['mem_per_packet'] = safe_divide(mem, pkts_proc + 1)
+
+    # Growth and rate features
+    features['ts_delta'] = ts_delta
+    features['pkts_rate'] = safe_divide(pkts_proc.diff().fillna(0.0), ts_delta.replace(0, np.nan))
+    features['bytes_rate'] = safe_divide(bytes_recv.diff().fillna(0.0), ts_delta.replace(0, np.nan))
+    features['events_rate'] = safe_divide(events_proc.diff().fillna(0.0), ts_delta.replace(0, np.nan))
+    features['queue_growth_rate'] = safe_divide(events_queued.diff().fillna(0.0), ts_delta.replace(0, np.nan))
+    features['conn_growth_rate'] = safe_divide(total_conns.diff().fillna(0.0), ts_delta.replace(0, np.nan))
+    features['file_growth_rate'] = safe_divide(files.diff().fillna(0.0), ts_delta.replace(0, np.nan))
+    features['dns_growth_rate'] = safe_divide(dns_requests.diff().fillna(0.0), ts_delta.replace(0, np.nan))
+
+    # Abrupt operational changes
+    features['mem_delta'] = mem.diff().fillna(0.0).abs()
+    features['queue_delta'] = events_queued.diff().fillna(0.0).abs()
+    features['conn_mix_delta'] = (
+        features['tcp_share'].diff().fillna(0.0).abs() +
+        features['udp_share'].diff().fillna(0.0).abs() +
+        features['icmp_share'].diff().fillna(0.0).abs()
+    )
     return features, 'timeseries'
 
 

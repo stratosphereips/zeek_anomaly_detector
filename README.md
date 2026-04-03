@@ -557,19 +557,34 @@ Why:
 
 - `stats.log` is telemetry about Zeek itself and overall traffic processing.
 - These are time-evolving counters and gauges, not flow records.
+- Raw counters by themselves are not enough. The more meaningful signal is in workload ratios, queue pressure, protocol mix, file-extraction intensity, and growth rates.
 
-Main features include the available counters, for example:
+Main features now include operational ratios and rates such as:
 
 - Memory
-- Processed packets
-- Bytes received
-- Events processed and queued
-- Active connection counts
-- File counters
-- DNS counters
-- Reassembly sizes
+- Events queued
+- Active connections
+- Active files
+- Active DNS requests
+- Total reassembly size
+- Bytes per packet
+- Events per packet
+- Queue-to-processed ratio
+- Active-to-total connection ratio
+- TCP, UDP, and ICMP share
+- Files per connection
+- Active files per connection
+- DNS requests per UDP connection
+- Active DNS pressure
+- Reassembly per TCP connection
+- Timer pressure
+- Memory per packet
+- Packet, byte, event, queue, connection, file, and DNS growth rates
+- Memory delta
+- Queue delta
+- Connection-mix delta
 
-The score is built from absolute z-scores plus z-scores of first differences, so both unusual levels and sudden changes matter.
+The score is still time-series based, but it now operates on these derived operational features. That makes `stats.log` anomalies more meaningful in Zeek terms: queue buildup, workload-shape changes, abnormal protocol mix shifts, unusual file or DNS intensity, and abrupt processing-pressure changes.
 
 ### `capture_loss.log`
 
