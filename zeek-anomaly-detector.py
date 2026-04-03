@@ -1698,15 +1698,63 @@ def export_score_plots(path, input_path, file_results, directory_summary, baseli
             component_names.append('behavior_score')
             component_values.append(directory_summary.get('behavior_score', 0.0))
 
-        axes[0].bar(component_names, component_values, color='#4c78a8')
-        axes[0].set_ylim(0, max(1.0, max(component_values) * 1.15 if component_values else 1.0))
+        x_positions = np.arange(len(component_names))
+        axes[0].bar(x_positions, component_values, color='#4c78a8', label='Suspect directory')
+
+        baseline_medians = []
+        baseline_thresholds = []
+        has_baseline_overlay = baseline_comparison is not None
+        if has_baseline_overlay:
+            baseline_medians = [
+                baseline_comparison.get('baseline_medians', {}).get(name, np.nan)
+                for name in component_names
+            ]
+            baseline_thresholds = [
+                baseline_comparison.get('baseline_thresholds', {}).get(name, np.nan)
+                for name in component_names
+            ]
+
+        if has_baseline_overlay:
+            axes[0].plot(
+                x_positions,
+                baseline_medians,
+                color='#59a14f',
+                marker='o',
+                linewidth=1.6,
+                label='Normal baseline median'
+            )
+            axes[0].plot(
+                x_positions,
+                baseline_thresholds,
+                color='#e15759',
+                marker='D',
+                linestyle='--',
+                linewidth=1.4,
+                label='Normal baseline threshold'
+            )
+
+        all_component_values = list(component_values)
+        if has_baseline_overlay:
+            all_component_values.extend(
+                value for value in baseline_medians
+                if value is not None and np.isfinite(value)
+            )
+            all_component_values.extend(
+                value for value in baseline_thresholds
+                if value is not None and np.isfinite(value)
+            )
+
+        max_component_value = max(all_component_values) if all_component_values else 1.0
+        axes[0].set_ylim(0, max(1.0, max_component_value * 1.15))
         axes[0].set_ylabel('Normalized component value')
         axes[0].set_title(
             f'Directory score={directory_summary["score"]:.1f}/100, severity={directory_summary["severity"]}'
             if directory_summary else 'Directory summary unavailable'
         )
-        axes[0].tick_params(axis='x', rotation=20)
+        axes[0].set_xticks(x_positions)
+        axes[0].set_xticklabels(component_names, rotation=20)
         axes[0].grid(True, axis='y', alpha=0.25)
+        axes[0].legend(loc='upper right', fontsize=8)
 
         top_logs = directory_summary.get('top_logs', []) if directory_summary else []
         labels = [result['log_name'] for result in top_logs]

@@ -794,6 +794,12 @@ Each file entry contains:
 - Total rows
 - Number and fraction of anomalous rows
 - Top anomaly score statistics
+- Detector method
+- Feature columns used
+- Related anomalous `uid` and `fuid` values
+- Top anomalous rows as JSON records
+
+This is the recommended output if you want to compare many Zeek directories programmatically or feed the results into another analysis stage.
 
 ### Export Score Plots
 
@@ -809,6 +815,12 @@ The PDF contains:
 - One combined flow-by-flow page across all log files
 - One score plot per Zeek log file
 
+If you also use `-N` or `--normal-dir`, the summary page overlays:
+
+- Blue bars for the suspect directory
+- A green line for the learned normal median of each directory-summary metric
+- A red dashed line for the learned normal threshold of each metric
+
 Each per-file plot shows:
 
 - A blue line for the score of every flow or row, in file order
@@ -823,12 +835,6 @@ The combined page shows:
 - Red markers for anomalous rows across the whole run
 
 This is useful when you want to see whether anomalies are isolated spikes, repeated bursts, or broad campaigns across a file.
-- Detector method
-- Feature columns used
-- Related anomalous `uid` and `fuid` values
-- Top anomalous rows as JSON records
-
-This is the recommended output if you want to compare many Zeek directories programmatically or feed the results into another analysis stage.
 
 ## Practical Guidance
 
