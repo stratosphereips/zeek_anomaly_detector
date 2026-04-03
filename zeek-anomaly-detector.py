@@ -972,6 +972,24 @@ def get_log_weight(log_name):
     return LOG_WEIGHTS.get(log_name, 0.40)
 
 
+def robust_upper_bound(values, default_margin, bounded_max=None):
+    numeric = pd.Series(values, dtype=float).dropna()
+    if numeric.empty:
+        upper = default_margin
+    elif len(numeric) == 1:
+        upper = numeric.iloc[0] + default_margin
+    elif len(numeric) == 2:
+        upper = numeric.max() + default_margin
+    else:
+        median = numeric.median()
+        mad = (numeric - median).abs().median() * 1.4826
+        upper = median + max(default_margin, 3.5 * mad)
+
+    if bounded_max is not None:
+        upper = min(bounded_max, upper)
+    return float(upper)
+
+
 def build_directory_summary(file_results):
     if not file_results:
         return None
@@ -1059,6 +1077,83 @@ def build_directory_summary(file_results):
     }
 
 
+def build_normal_baseline(normal_summaries):
+    if not normal_summaries:
+        return None
+
+    metrics = {
+        'score': [summary['score'] for summary in normal_summaries],
+        'weighted_top': [summary['weighted_top'] for summary in normal_summaries],
+        'weighted_fraction': [summary['weighted_fraction'] for summary in normal_summaries],
+        'uid_corr_score': [summary['uid_corr_score'] for summary in normal_summaries],
+        'weird_notice_bonus': [summary['weird_notice_bonus'] for summary in normal_summaries],
+        'fuid_bonus': [summary['fuid_bonus'] for summary in normal_summaries],
+        'crosslog_uid_two_plus': [summary['crosslog_uid_two_plus'] for summary in normal_summaries],
+        'crosslog_uid_three_plus': [summary['crosslog_uid_three_plus'] for summary in normal_summaries],
+        'fuid_overlap': [summary['fuid_overlap'] for summary in normal_summaries],
+    }
+
+    thresholds = {
+        'score': robust_upper_bound(metrics['score'], 10.0, 100.0),
+        'weighted_top': robust_upper_bound(metrics['weighted_top'], 0.08, 1.0),
+        'weighted_fraction': robust_upper_bound(metrics['weighted_fraction'], 0.08, 1.0),
+        'uid_corr_score': robust_upper_bound(metrics['uid_corr_score'], 0.10, 1.0),
+        'weird_notice_bonus': robust_upper_bound(metrics['weird_notice_bonus'], 0.10, 1.0),
+        'fuid_bonus': robust_upper_bound(metrics['fuid_bonus'], 0.10, 1.0),
+        'crosslog_uid_two_plus': robust_upper_bound(metrics['crosslog_uid_two_plus'], 2.0),
+        'crosslog_uid_three_plus': robust_upper_bound(metrics['crosslog_uid_three_plus'], 1.0),
+        'fuid_overlap': robust_upper_bound(metrics['fuid_overlap'], 1.0),
+    }
+
+    medians = {
+        key: float(pd.Series(values, dtype=float).median()) if values else 0.0
+        for key, values in metrics.items()
+    }
+
+    return {
+        'normal_directories': len(normal_summaries),
+        'thresholds': thresholds,
+        'medians': medians,
+    }
+
+
+def compare_against_baseline(directory_summary, baseline):
+    if directory_summary is None or baseline is None:
+        return None
+
+    exceeded = []
+    for metric, threshold in baseline['thresholds'].items():
+        value = float(directory_summary.get(metric, 0.0))
+        if value > threshold:
+            exceeded.append({
+                'metric': metric,
+                'value': value,
+                'threshold': threshold,
+                'delta': value - threshold,
+            })
+
+    exceeded = sorted(exceeded, key=lambda item: item['delta'], reverse=True)
+
+    if directory_summary['score'] > baseline['thresholds']['score'] or len(exceeded) >= 4:
+        verdict = 'ABOVE NORMAL BASELINE'
+        color = 'red'
+    elif len(exceeded) >= 2:
+        verdict = 'SUSPICIOUS VS BASELINE'
+        color = 'yellow'
+    else:
+        verdict = 'WITHIN NORMAL BASELINE'
+        color = 'green'
+
+    return {
+        'verdict': verdict,
+        'color': color,
+        'exceeded_metrics': exceeded,
+        'baseline_thresholds': baseline['thresholds'],
+        'baseline_medians': baseline['medians'],
+        'normal_directories': baseline['normal_directories'],
+    }
+
+
 def print_directory_summary(summary, directory_path):
     print(f'\n{style("Directory Summary", "cyan", bold=True)}')
     header = f'{summary["severity"]} MALICIOUSNESS'
@@ -1091,10 +1186,33 @@ def print_directory_summary(summary, directory_path):
         )
 
 
-def export_json_summary(path, input_path, file_results, directory_summary):
+def print_baseline_comparison(comparison):
+    print(f'\n{style("Baseline Comparison", "cyan", bold=True)}')
+    print(style(
+        f'{comparison["verdict"]} using {comparison["normal_directories"]} normal director'
+        f'{"y" if comparison["normal_directories"] == 1 else "ies"}',
+        comparison['color'],
+        bold=True
+    ))
+    if not comparison['exceeded_metrics']:
+        print('No summary metrics exceeded the learned normal thresholds.')
+        return
+
+    print('Exceeded metrics:')
+    for item in comparison['exceeded_metrics'][:8]:
+        print(
+            f'  - {item["metric"]}: '
+            f'value={item["value"]:.3f}, '
+            f'threshold={item["threshold"]:.3f}, '
+            f'delta=+{item["delta"]:.3f}'
+        )
+
+
+def export_json_summary(path, input_path, file_results, directory_summary, baseline_comparison=None):
     payload = {
         'input_path': input_path,
         'directory_summary': directory_summary,
+        'baseline_comparison': baseline_comparison,
         'files': [],
     }
 
@@ -1120,7 +1238,34 @@ def export_json_summary(path, input_path, file_results, directory_summary):
         json.dump(to_serializable(payload), handle, indent=2)
 
 
-def detect(log_name, file, df, context, amountanom, dumptocsv, verbosity=0, debug=0):
+def analyze_directory(input_path, amountanom, dumptocsv, verbosity=0, debug=0, print_output=True):
+    log_files = iter_log_files(input_path)
+    log_frames = {log_file.stem: load_zeek_log(log_file) for log_file in log_files}
+    context = build_context(log_frames)
+
+    file_results = []
+    found_any_anomalies = False
+    for log_file in log_files:
+        result = detect(
+            log_file.stem,
+            log_file,
+            log_frames[log_file.stem],
+            context,
+            amountanom,
+            dumptocsv if print_output else None,
+            verbosity if print_output else 0,
+            debug if print_output else 0,
+            print_output=print_output,
+        )
+        if result is not None:
+            file_results.append(result)
+            found_any_anomalies = found_any_anomalies or result['anomaly_rows'] > 0
+
+    directory_summary = build_directory_summary(file_results) if Path(input_path).is_dir() and file_results else None
+    return file_results, directory_summary, found_any_anomalies
+
+
+def detect(log_name, file, df, context, amountanom, dumptocsv, verbosity=0, debug=0, print_output=True):
     builder = FEATURE_BUILDERS.get(log_name, build_generic_features)
     features, scorer_name = builder(df.copy(), context)
     scores, preds, used_cols, method = SCORERS[scorer_name](features, amountanom)
@@ -1147,8 +1292,9 @@ def detect(log_name, file, df, context, amountanom, dumptocsv, verbosity=0, debu
     if anomalous.empty:
         return summarize_file_result(log_name, enriched, anomalous, amountanom, used_cols, method)
 
-    print(f'\nTop anomalies in {Path(file).name}')
-    print(anomalous[select_print_columns(anomalous)])
+    if print_output:
+        print(f'\nTop anomalies in {Path(file).name}')
+        print(anomalous[select_print_columns(anomalous)])
     return summarize_file_result(log_name, enriched, anomalous, amountanom, used_cols, method)
 
 
@@ -1182,6 +1328,10 @@ if __name__ == '__main__':
     parser.add_argument('-J', '--jsonsummary',
                         help='Write a JSON summary with per-file results and the directory score.',
                         required=False)
+    parser.add_argument('-N', '--normal-dir',
+                        help='Known-normal Zeek directory used to train baseline thresholds. Repeat for multiple directories.',
+                        action='append',
+                        required=False)
     args = parser.parse_args()
 
     if args.verbose or args.debug:
@@ -1190,34 +1340,45 @@ if __name__ == '__main__':
         print('        Veronica Valeros (vero.valeros@gmail.com)')
 
     input_path = args.file or args.directory
-    log_files = iter_log_files(input_path)
-    log_frames = {log_file.stem: load_zeek_log(log_file) for log_file in log_files}
-    context = build_context(log_frames)
+    file_results, directory_summary, found_any_anomalies = analyze_directory(
+        input_path,
+        args.amountanom,
+        args.dumptocsv,
+        args.verbose or 0,
+        args.debug or 0,
+        print_output=True
+    )
 
-    file_results = []
-    found_any_anomalies = False
-    for log_file in log_files:
-        result = detect(
-            log_file.stem,
-            log_file,
-            log_frames[log_file.stem],
-            context,
-            args.amountanom,
-            args.dumptocsv,
-            args.verbose or 0,
-            args.debug or 0
-        )
-        if result is not None:
-            file_results.append(result)
-            found_any_anomalies = found_any_anomalies or result['anomaly_rows'] > 0
-
-    directory_summary = None
+    baseline_comparison = None
     if args.directory and file_results:
-        directory_summary = build_directory_summary(file_results)
         print_directory_summary(directory_summary, args.directory)
+        if args.normal_dir:
+            normal_summaries = []
+            for normal_dir in args.normal_dir:
+                _, normal_summary, _ = analyze_directory(
+                    normal_dir,
+                    args.amountanom,
+                    None,
+                    0,
+                    0,
+                    print_output=False
+                )
+                if normal_summary is not None:
+                    normal_summaries.append(normal_summary)
+
+            baseline = build_normal_baseline(normal_summaries)
+            baseline_comparison = compare_against_baseline(directory_summary, baseline)
+            if baseline_comparison is not None:
+                print_baseline_comparison(baseline_comparison)
 
     if args.jsonsummary:
-        export_json_summary(args.jsonsummary, input_path, file_results, directory_summary)
+        export_json_summary(
+            args.jsonsummary,
+            input_path,
+            file_results,
+            directory_summary,
+            baseline_comparison
+        )
 
     if (args.verbose or args.debug) and not found_any_anomalies:
         print('No anomalies detected.')

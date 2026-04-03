@@ -176,6 +176,69 @@ The final result is shown on a `0-100` scale and labeled as:
 
 These labels are intended for triage, not as a calibrated probability of compromise.
 
+### 5. Training A Normal Baseline
+
+You can train thresholds from known-normal Zeek directories by passing one or more `--normal-dir` values during a directory run.
+
+Example with one normal directory:
+
+```bash
+python3 zeek-anomaly-detector.py \
+  -d /path/to/suspect/zeek \
+  -N /path/to/known-normal/zeek
+```
+
+Example with multiple normal directories:
+
+```bash
+python3 zeek-anomaly-detector.py \
+  -d /path/to/suspect/zeek \
+  -N /path/to/normal1 \
+  -N /path/to/normal2 \
+  -N /path/to/normal3
+```
+
+#### Best way to train when normal traffic varies
+
+The best approach is not to learn a hard threshold from a single raw anomaly score. Normal Zeek directories vary naturally because of:
+
+- Different traffic volumes
+- Different protocol mix
+- Different scanning and discovery noise
+- Different host inventories
+- Different capture durations
+
+So the tool learns thresholds from the directory-summary components instead of per-row raw scores.
+
+It computes the normal baseline on:
+
+- `score`
+- `weighted_top`
+- `weighted_fraction`
+- `uid_corr_score`
+- `weird_notice_bonus`
+- `fuid_bonus`
+- cross-log overlap counts
+
+When multiple normal directories are provided, the threshold for each metric is learned with robust statistics:
+
+- median
+- MAD-based upper bound
+
+When only one or two normal directories are provided, the tool falls back to a conservative margin above the observed normal values.
+
+This is not as strong as training on many normal directories, but it is still better than using one global fixed threshold.
+
+#### Output
+
+When `--normal-dir` is used, the final output includes a `Baseline Comparison` section that says whether the current directory is:
+
+- `WITHIN NORMAL BASELINE`
+- `SUSPICIOUS VS BASELINE`
+- `ABOVE NORMAL BASELINE`
+
+It also prints which summary metrics exceeded the learned normal thresholds.
+
 ## Techniques By Log Type
 
 ### `conn.log`
