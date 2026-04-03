@@ -119,7 +119,9 @@ So the directory score does not use raw totals directly.
 
 #### What the directory score uses
 
-The directory score combines five normalized components:
+The directory score combines the anomaly summary with a behavior profile learned from the whole directory.
+
+The main components are:
 
 1. `weighted_top`
 
@@ -153,12 +155,24 @@ This matters because these logs already represent unusual or alert-like behavior
 
 This is useful for suspicious content delivery, payload transfer, and file-backed HTTP anomalies.
 
+6. `behavior_score`
+
+- Builds a source-level behavior profile from `conn.log`
+- Measures broad scan-like activity such as:
+  - high destination-port fanout
+  - large per-destination port sweeps
+  - high failed-connection fraction
+  - short, zero-payload, service-missing connection patterns
+- Keeps the strongest behavioral outliers and prints them in the `Directory Summary`
+
+This is the part that lets the tool detect broad campaigns like simple Nmap scans even when they do not generate much `uid` overlap in higher-level logs.
+
 #### Directory score formula
 
 The current implementation uses this weighted combination:
 
 ```text
-directory_score =
+core_score =
 100 * (
   0.35 * weighted_top +
   0.25 * uid_correlation +
@@ -166,6 +180,8 @@ directory_score =
   0.15 * weird_notice +
   0.05 * fuid_overlap
 )
+
+directory_score = min(100, core_score + 45 * behavior_score)
 ```
 
 The final result is shown on a `0-100` scale and labeled as:

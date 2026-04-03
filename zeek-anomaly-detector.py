@@ -325,6 +325,47 @@ def build_context(log_frames):
         conn_metrics = conn_metrics.groupby(level=0).max()
         uid_metrics = uid_metrics.join(conn_metrics, how='outer') if not uid_metrics.empty else conn_metrics
 
+    src_conn_metrics = pd.DataFrame()
+    if not conn.empty and 'id.orig_h' in conn.columns:
+        conn_src = pd.DataFrame({
+            'src': text_series(conn, 'id.orig_h'),
+            'dst_host': text_series(conn, 'id.resp_h'),
+            'dst_port': text_series(conn, 'id.resp_p'),
+            'conn_state': text_series(conn, 'conn_state'),
+            'service': text_series(conn, 'service'),
+            'duration': numeric_series(conn, 'duration'),
+            'total_bytes': numeric_series(conn, 'orig_bytes') + numeric_series(conn, 'resp_bytes'),
+        })
+        conn_src['is_failed_scan_state'] = conn_src['conn_state'].isin({
+            'S0', 'REJ', 'RSTO', 'RSTOS0', 'RSTR', 'RSTRH', 'SH', 'SHR'
+        }).astype(float)
+        conn_src['is_short'] = (conn_src['duration'] <= 0.05).astype(float)
+        conn_src['is_zero_payload'] = (conn_src['total_bytes'] <= 0).astype(float)
+        conn_src['is_service_missing'] = conn_src['service'].isin({'', '-', '(empty)'}).astype(float)
+
+        per_src = conn_src.groupby('src').agg(
+            src_flow_count=('src', 'size'),
+            src_unique_resp_hosts=('dst_host', 'nunique'),
+            src_unique_resp_ports=('dst_port', 'nunique'),
+            src_failed_state_fraction=('is_failed_scan_state', 'mean'),
+            src_short_fraction=('is_short', 'mean'),
+            src_zero_payload_fraction=('is_zero_payload', 'mean'),
+            src_missing_service_fraction=('is_service_missing', 'mean'),
+        )
+
+        per_src_dst = conn_src.groupby(['src', 'dst_host']).agg(
+            dst_port_sweep=('dst_port', 'nunique'),
+            dst_failed_fraction=('is_failed_scan_state', 'mean'),
+        ).reset_index()
+        sweep_summary = per_src_dst.groupby('src').agg(
+            src_max_dst_port_sweep=('dst_port_sweep', 'max'),
+            src_mean_dst_port_sweep=('dst_port_sweep', 'mean'),
+            src_max_dst_failed_fraction=('dst_failed_fraction', 'max'),
+        )
+        src_conn_metrics = per_src.join(sweep_summary, how='left').fillna(0.0)
+
+    context['src_conn_metrics'] = src_conn_metrics
+
     weird = log_frames.get('weird', pd.DataFrame())
     if not weird.empty and 'uid' in weird.columns:
         weird_metrics = pd.DataFrame({
@@ -413,12 +454,36 @@ def build_conn_features(df, context):
     features['dst_host_popularity'] = zscore_series(text_series(df, 'id.resp_h').map(
         text_series(df, 'id.resp_h').value_counts()
     ).fillna(0))
+    features['is_failed_scan_state'] = text_series(df, 'conn_state').isin({
+        'S0', 'REJ', 'RSTO', 'RSTOS0', 'RSTR', 'RSTRH', 'SH', 'SHR'
+    }).astype(float)
+    features['is_scan_history'] = text_series(df, 'history').isin({
+        'S', 'Sr', 'Ar', 'A', 'R', 'Sh', 'ShR'
+    }).astype(float)
+    features['is_short_conn'] = (duration <= 0.05).astype(float)
+    features['is_zero_payload'] = ((orig_bytes + resp_bytes) <= 0).astype(float)
+    features['is_service_missing'] = text_series(df, 'service').isin({'', '-', '(empty)'}).astype(float)
+    features['is_established_session'] = text_series(df, 'conn_state').isin({'SF', 'S1'}).astype(float)
+
+    src_conn_metrics = context.get('src_conn_metrics', pd.DataFrame())
+    if not src_conn_metrics.empty and 'id.orig_h' in df.columns:
+        src_series = text_series(df, 'id.orig_h')
+        for column in [
+            'src_flow_count', 'src_unique_resp_hosts', 'src_unique_resp_ports',
+            'src_failed_state_fraction', 'src_short_fraction',
+            'src_zero_payload_fraction', 'src_missing_service_fraction',
+            'src_max_dst_port_sweep', 'src_mean_dst_port_sweep',
+            'src_max_dst_failed_fraction',
+        ]:
+            if column in src_conn_metrics.columns:
+                features[column] = src_series.map(src_conn_metrics[column]).fillna(0.0).astype(float)
+
     add_uid_context(features, df, context, [
         'uid_log_types', 'uid_http_count', 'uid_files_count',
         'uid_ssh_count', 'uid_weird_count', 'uid_file_total_bytes',
         'uid_weird_name_rarity'
     ])
-    return features, 'isolation_forest'
+    return features, 'conn_hybrid'
 
 
 def build_http_features(df, context):
@@ -935,11 +1000,104 @@ def score_dns_hybrid(features, amountanom):
     return scores, preds, used_cols, 'dns_hybrid'
 
 
+def score_conn_hybrid(features, amountanom):
+    matrix, used_cols = prepare_feature_matrix(features)
+    if matrix.empty:
+        return pd.Series(dtype=float), pd.Series(dtype=int), used_cols, 'none'
+
+    base_scores, _, _, base_method = score_isolation_forest(features, amountanom)
+    if base_scores.empty:
+        return base_scores, pd.Series(dtype=int), used_cols, base_method
+
+    positive = pd.Series(0.0, index=matrix.index)
+    for column, weight in [
+        ('src_flow_count', 1.2),
+        ('src_unique_resp_hosts', 1.4),
+        ('src_unique_resp_ports', 2.8),
+        ('src_failed_state_fraction', 2.5),
+        ('src_short_fraction', 1.8),
+        ('src_zero_payload_fraction', 2.4),
+        ('src_missing_service_fraction', 1.8),
+        ('src_max_dst_port_sweep', 3.4),
+        ('src_mean_dst_port_sweep', 1.5),
+        ('src_max_dst_failed_fraction', 1.8),
+        ('is_failed_scan_state', 1.6),
+        ('is_scan_history', 1.2),
+        ('is_short_conn', 1.0),
+        ('is_zero_payload', 1.5),
+        ('is_service_missing', 1.0),
+        ('state_rarity', 0.5),
+        ('history_rarity', 0.4),
+        ('resp_port_rarity', 0.4),
+    ]:
+        if column in matrix.columns:
+            positive += weight * zscore_series(matrix[column])
+
+    row_scan_intensity = pd.Series(0.0, index=matrix.index)
+    for column, weight in [
+        ('is_failed_scan_state', 1.6),
+        ('is_scan_history', 1.1),
+        ('is_short_conn', 0.9),
+        ('is_zero_payload', 1.4),
+        ('is_service_missing', 0.8),
+    ]:
+        if column in matrix.columns:
+            row_scan_intensity += weight * matrix[column]
+
+    source_scan_scale = pd.Series(0.0, index=matrix.index)
+    for column, weight in [
+        ('src_unique_resp_ports', 0.05),
+        ('src_max_dst_port_sweep', 0.08),
+        ('src_flow_count', 0.003),
+        ('src_failed_state_fraction', 8.0),
+        ('src_short_fraction', 5.0),
+        ('src_zero_payload_fraction', 7.0),
+        ('src_missing_service_fraction', 4.0),
+        ('src_max_dst_failed_fraction', 5.0),
+    ]:
+        if column in matrix.columns:
+            source_scan_scale += weight * matrix[column]
+
+    raw_bonus = pd.Series(0.0, index=matrix.index)
+    for column, weight in [
+        ('is_failed_scan_state', 2.5),
+        ('is_scan_history', 1.5),
+        ('is_short_conn', 1.0),
+        ('is_zero_payload', 2.0),
+        ('is_service_missing', 1.0),
+    ]:
+        if column in matrix.columns:
+            raw_bonus += weight * matrix[column]
+
+    raw_bonus += source_scan_scale * row_scan_intensity
+
+    benign_penalty = pd.Series(0.0, index=matrix.index)
+    for column, weight in [
+        ('is_established_session', 1.2),
+    ]:
+        if column in matrix.columns:
+            benign_penalty += weight * matrix[column]
+
+    if 'total_bytes' in matrix.columns:
+        benign_penalty += 0.3 * zscore_series(matrix['total_bytes']).clip(lower=0.0)
+    if 'total_pkts' in matrix.columns:
+        benign_penalty += 0.2 * zscore_series(matrix['total_pkts']).clip(lower=0.0)
+    if 'is_established_session' in matrix.columns:
+        benign_penalty += 0.8 * matrix['is_established_session'] * (row_scan_intensity <= 0).astype(float)
+
+    scores = (base_scores + positive + raw_bonus - benign_penalty).clip(lower=0.0)
+    pred_index = scores.nlargest(min(amountanom, len(scores))).index
+    preds = pd.Series(0, index=matrix.index, dtype=int)
+    preds.loc[pred_index] = 1
+    return scores, preds, used_cols, f'conn_hybrid+{base_method}'
+
+
 SCORERS = {
     'isolation_forest': score_isolation_forest,
     'rarity': score_rarity,
     'timeseries': score_timeseries,
     'dns_hybrid': score_dns_hybrid,
+    'conn_hybrid': score_conn_hybrid,
 }
 
 
@@ -1053,9 +1211,93 @@ def robust_upper_bound(values, default_margin, bounded_max=None):
     return float(upper)
 
 
-def build_directory_summary(file_results):
+def build_behavior_profile(log_frames):
+    profile = {
+        'behavior_score': 0.0,
+        'conn_scan_score': 0.0,
+        'conn_scan_sources': [],
+    }
+
+    conn = log_frames.get('conn', pd.DataFrame())
+    if conn.empty or 'id.orig_h' not in conn.columns:
+        return profile
+
+    frame = pd.DataFrame({
+        'src': text_series(conn, 'id.orig_h'),
+        'dst_host': text_series(conn, 'id.resp_h'),
+        'dst_port': numeric_series(conn, 'id.resp_p'),
+        'conn_state': text_series(conn, 'conn_state'),
+        'history': text_series(conn, 'history'),
+        'service': text_series(conn, 'service'),
+        'duration': numeric_series(conn, 'duration'),
+        'total_bytes': numeric_series(conn, 'orig_bytes') + numeric_series(conn, 'resp_bytes'),
+    })
+    frame['failed_state'] = frame['conn_state'].isin({
+        'S0', 'REJ', 'RSTO', 'RSTOS0', 'RSTR', 'RSTRH', 'SH', 'SHR'
+    }).astype(float)
+    frame['scan_history'] = frame['history'].isin({'S', 'Sr', 'Ar', 'A', 'R', 'Sh', 'ShR'}).astype(float)
+    frame['short_conn'] = (frame['duration'] <= 0.05).astype(float)
+    frame['zero_payload'] = (frame['total_bytes'] <= 0).astype(float)
+    frame['missing_service'] = frame['service'].isin({'', '-', '(empty)'}).astype(float)
+    frame['scan_like'] = (
+        (frame['failed_state'] > 0) |
+        (frame['scan_history'] > 0) |
+        ((frame['short_conn'] > 0) & (frame['zero_payload'] > 0) & (frame['missing_service'] > 0))
+    ).astype(float)
+
+    per_src = frame.groupby('src').agg(
+        flow_count=('src', 'size'),
+        unique_resp_hosts=('dst_host', 'nunique'),
+        unique_resp_ports=('dst_port', 'nunique'),
+        failed_fraction=('failed_state', 'mean'),
+        short_fraction=('short_conn', 'mean'),
+        zero_payload_fraction=('zero_payload', 'mean'),
+        missing_service_fraction=('missing_service', 'mean'),
+        scan_like_fraction=('scan_like', 'mean'),
+    )
+    per_src_dst = frame.groupby(['src', 'dst_host']).agg(
+        max_dst_port_sweep=('dst_port', 'nunique')
+    ).reset_index()
+    per_src = per_src.join(
+        per_src_dst.groupby('src').agg(
+            max_dst_port_sweep=('max_dst_port_sweep', 'max'),
+        ),
+        how='left'
+    ).fillna(0.0)
+
+    per_src['scan_score'] = (
+        per_src['unique_resp_ports'].clip(upper=200) / 200.0 * 0.30 +
+        per_src['max_dst_port_sweep'].clip(upper=200) / 200.0 * 0.25 +
+        per_src['flow_count'].clip(upper=1000) / 1000.0 * 0.10 +
+        per_src['unique_resp_hosts'].clip(upper=25) / 25.0 * 0.10 +
+        per_src['failed_fraction'] * 0.10 +
+        per_src['short_fraction'] * 0.05 +
+        per_src['zero_payload_fraction'] * 0.07 +
+        per_src['scan_like_fraction'] * 0.03
+    ).clip(lower=0.0, upper=1.0)
+
+    profile['conn_scan_score'] = float(per_src['scan_score'].max()) if not per_src.empty else 0.0
+    profile['behavior_score'] = profile['conn_scan_score']
+    profile['conn_scan_sources'] = [
+        {
+            'src': src,
+            'scan_score': float(row['scan_score']),
+            'flow_count': int(row['flow_count']),
+            'unique_resp_hosts': int(row['unique_resp_hosts']),
+            'unique_resp_ports': int(row['unique_resp_ports']),
+            'max_dst_port_sweep': int(row['max_dst_port_sweep']),
+            'failed_fraction': float(row['failed_fraction']),
+            'scan_like_fraction': float(row['scan_like_fraction']),
+        }
+        for src, row in per_src.sort_values(by='scan_score', ascending=False).head(3).iterrows()
+    ]
+    return profile
+
+
+def build_directory_summary(file_results, behavior_profile=None):
     if not file_results:
         return None
+    behavior_profile = behavior_profile or {}
 
     total_weight = sum(get_log_weight(result['log_name']) for result in file_results) or 1.0
     weighted_top = sum(
@@ -1100,13 +1342,17 @@ def build_directory_summary(file_results):
     fuid_overlap = len(anomalous_file_fuids & linked_http_fuids)
     fuid_bonus = min(1.0, fuid_overlap / 5.0)
 
-    directory_score = (
+    behavior_score = float(behavior_profile.get('behavior_score', 0.0))
+    conn_scan_score = float(behavior_profile.get('conn_scan_score', 0.0))
+
+    core_score = (
         0.35 * weighted_top +
         0.25 * uid_corr_score +
         0.20 * weighted_fraction +
         0.15 * weird_notice_bonus +
         0.05 * fuid_bonus
     ) * 100.0
+    directory_score = min(100.0, core_score + 45.0 * behavior_score)
 
     if directory_score >= 70:
         severity = 'HIGH'
@@ -1133,6 +1379,9 @@ def build_directory_summary(file_results):
         'uid_corr_score': uid_corr_score,
         'weird_notice_bonus': weird_notice_bonus,
         'fuid_bonus': fuid_bonus,
+        'behavior_score': behavior_score,
+        'conn_scan_score': conn_scan_score,
+        'conn_scan_sources': behavior_profile.get('conn_scan_sources', []),
         'crosslog_uid_two_plus': crosslog_uid_two_plus,
         'crosslog_uid_three_plus': crosslog_uid_three_plus,
         'fuid_overlap': fuid_overlap,
@@ -1151,6 +1400,8 @@ def build_normal_baseline(normal_summaries):
         'uid_corr_score': [summary['uid_corr_score'] for summary in normal_summaries],
         'weird_notice_bonus': [summary['weird_notice_bonus'] for summary in normal_summaries],
         'fuid_bonus': [summary['fuid_bonus'] for summary in normal_summaries],
+        'behavior_score': [summary.get('behavior_score', 0.0) for summary in normal_summaries],
+        'conn_scan_score': [summary.get('conn_scan_score', 0.0) for summary in normal_summaries],
         'crosslog_uid_two_plus': [summary['crosslog_uid_two_plus'] for summary in normal_summaries],
         'crosslog_uid_three_plus': [summary['crosslog_uid_three_plus'] for summary in normal_summaries],
         'fuid_overlap': [summary['fuid_overlap'] for summary in normal_summaries],
@@ -1163,6 +1414,8 @@ def build_normal_baseline(normal_summaries):
         'uid_corr_score': robust_upper_bound(metrics['uid_corr_score'], 0.10, 1.0),
         'weird_notice_bonus': robust_upper_bound(metrics['weird_notice_bonus'], 0.10, 1.0),
         'fuid_bonus': robust_upper_bound(metrics['fuid_bonus'], 0.10, 1.0),
+        'behavior_score': robust_upper_bound(metrics['behavior_score'], 0.08, 1.0),
+        'conn_scan_score': robust_upper_bound(metrics['conn_scan_score'], 0.08, 1.0),
         'crosslog_uid_two_plus': robust_upper_bound(metrics['crosslog_uid_two_plus'], 2.0),
         'crosslog_uid_three_plus': robust_upper_bound(metrics['crosslog_uid_three_plus'], 1.0),
         'fuid_overlap': robust_upper_bound(metrics['fuid_overlap'], 1.0),
@@ -1228,7 +1481,8 @@ def print_directory_summary(summary, directory_path):
         f'uid_correlation={summary["uid_corr_score"]:.3f}, '
         f'anomaly_fraction={summary["weighted_fraction"]:.3f}, '
         f'weird_notice={summary["weird_notice_bonus"]:.3f}, '
-        f'fuid_overlap={summary["fuid_bonus"]:.3f}'
+        f'fuid_overlap={summary["fuid_bonus"]:.3f}, '
+        f'behavior={summary["behavior_score"]:.3f}'
     )
     print(
         'Cross-log ties: '
@@ -1236,6 +1490,18 @@ def print_directory_summary(summary, directory_path):
         f'uid_in_3plus_logs={summary["crosslog_uid_three_plus"]}, '
         f'http_files_fuid_overlap={summary["fuid_overlap"]}'
     )
+    if summary['conn_scan_sources']:
+        print('Behavioral outliers:')
+        for source in summary['conn_scan_sources']:
+            print(
+                f'  - conn source {source["src"]}: '
+                f'scan_score={source["scan_score"]:.3f}, '
+                f'flows={source["flow_count"]}, '
+                f'dst_hosts={source["unique_resp_hosts"]}, '
+                f'dst_ports={source["unique_resp_ports"]}, '
+                f'max_dst_port_sweep={source["max_dst_port_sweep"]}, '
+                f'failed_fraction={source["failed_fraction"]:.3f}'
+            )
     print('Top contributing logs:')
     for result in summary['top_logs']:
         contribution = get_log_weight(result['log_name']) * result['top_percentile_mean']
@@ -1319,6 +1585,7 @@ def analyze_directory(input_path, amountanom, dumptocsv, verbosity=0, debug=0, p
         return [], None, False
 
     context = build_context(log_frames)
+    behavior_profile = build_behavior_profile(log_frames)
 
     file_results = []
     found_any_anomalies = False
@@ -1340,7 +1607,10 @@ def analyze_directory(input_path, amountanom, dumptocsv, verbosity=0, debug=0, p
             file_results.append(result)
             found_any_anomalies = found_any_anomalies or result['anomaly_rows'] > 0
 
-    directory_summary = build_directory_summary(file_results) if Path(input_path).is_dir() and file_results else None
+    directory_summary = (
+        build_directory_summary(file_results, behavior_profile)
+        if Path(input_path).is_dir() and file_results else None
+    )
     return file_results, directory_summary, found_any_anomalies
 
 
