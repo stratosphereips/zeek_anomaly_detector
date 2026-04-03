@@ -67,6 +67,10 @@ ANSI = {
 }
 
 
+class EmptyLogError(ValueError):
+    """Raised when a Zeek log has no content rows to analyze."""
+
+
 def detect_log_format(file):
     """Return the log format based on the first non-empty line."""
     with open(file, encoding='utf-8') as handle:
@@ -77,7 +81,7 @@ def detect_log_format(file):
             if stripped.startswith('{') or stripped.startswith('['):
                 return 'json'
             return 'tsv'
-    raise ValueError(f'Input file {file} is empty.')
+    raise EmptyLogError(f'Input file {file} is empty.')
 
 
 def get_tsv_columns(file):
@@ -1299,12 +1303,28 @@ def export_json_summary(path, input_path, file_results, directory_summary, basel
 
 def analyze_directory(input_path, amountanom, dumptocsv, verbosity=0, debug=0, print_output=True):
     log_files = iter_log_files(input_path)
-    log_frames = {log_file.stem: load_zeek_log(log_file) for log_file in log_files}
+    log_frames = {}
+    skipped_empty_logs = []
+    for log_file in log_files:
+        try:
+            log_frames[log_file.stem] = load_zeek_log(log_file)
+        except EmptyLogError:
+            skipped_empty_logs.append(log_file)
+
+    if skipped_empty_logs and print_output:
+        for log_file in skipped_empty_logs:
+            print(f"Skipping {log_file.name}: empty file.")
+
+    if not log_frames:
+        return [], None, False
+
     context = build_context(log_frames)
 
     file_results = []
     found_any_anomalies = False
     for log_file in log_files:
+        if log_file.stem not in log_frames:
+            continue
         result = detect(
             log_file.stem,
             log_file,
