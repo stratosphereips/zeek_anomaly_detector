@@ -17,6 +17,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+os.environ.setdefault('MPLCONFIGDIR', '/tmp/zeek-anomaly-detector-mpl')
+os.makedirs(os.environ['MPLCONFIGDIR'], exist_ok=True)
+
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+except ImportError:  # pragma: no cover - optional dependency at runtime
+    matplotlib = None
+    plt = None
+    PdfPages = None
+
 try:
     from sklearn.ensemble import IsolationForest
 except ImportError:  # pragma: no cover - optional dependency at runtime
@@ -1186,6 +1199,15 @@ def summarize_file_result(log_name, enriched, anomalous, amountanom, used_cols, 
         'fuid_values': fuid_values,
         'linked_fuid_values': linked_fuid_values,
         'top_anomalies': top_records,
+        'score_values': [float(value) for value in enriched['score'].fillna(0.0).tolist()],
+        'score_percentiles': [float(value) for value in percentiles.fillna(0.0).tolist()],
+        'pred_values': [int(value) for value in enriched['pred'].fillna(0).astype(int).tolist()],
+        'score_cutoff': (
+            float(anomalous['score'].min()) if not anomalous.empty else 0.0
+        ),
+        'percentile_cutoff': (
+            float(percentiles.loc[anomalous.index].min()) if not anomalous.empty else 0.0
+        ),
     }
 
 
@@ -1537,6 +1559,207 @@ def print_baseline_comparison(comparison):
         )
 
 
+def _plot_file_scores(axis, result):
+    scores = np.asarray(result.get('score_values', []), dtype=float)
+    preds = np.asarray(result.get('pred_values', []), dtype=int)
+    if scores.size == 0:
+        axis.text(0.5, 0.5, 'No scores available', ha='center', va='center')
+        axis.set_axis_off()
+        return
+
+    x = np.arange(scores.size)
+    axis.plot(x, scores, color='#1f77b4', linewidth=1.0, label='Score')
+
+    anomaly_idx = x[preds == 1]
+    anomaly_scores = scores[preds == 1]
+    if anomaly_idx.size:
+        axis.scatter(
+            anomaly_idx,
+            anomaly_scores,
+            color='#d62728',
+            s=18,
+            zorder=3,
+            label='Anomalous flow'
+        )
+        axis.axhline(
+            result.get('score_cutoff', 0.0),
+            color='#ff7f0e',
+            linestyle='--',
+            linewidth=1.0,
+            label='Cutoff'
+        )
+
+    axis.set_title(
+        f'{result["log_name"]}.log  '
+        f'({result["method"]}, rows={result["rows"]}, anomalies={result["anomaly_rows"]})',
+        fontsize=11
+    )
+    axis.set_xlabel('Flow index')
+    axis.set_ylabel('Score')
+    axis.grid(True, alpha=0.25)
+    axis.legend(loc='upper right', fontsize=8)
+
+
+def _plot_combined_scores(axis, file_results, directory_summary):
+    offset = 0
+    boundary_positions = []
+    boundary_labels = []
+    any_points = False
+
+    for index, result in enumerate(file_results):
+        percentiles = np.asarray(result.get('score_percentiles', []), dtype=float)
+        preds = np.asarray(result.get('pred_values', []), dtype=int)
+        if percentiles.size == 0:
+            continue
+
+        x = np.arange(offset, offset + percentiles.size)
+        color = '#1f77b4' if index % 2 == 0 else '#4c78a8'
+        axis.plot(x, percentiles, color=color, linewidth=0.9, alpha=0.8)
+
+        anomaly_idx = x[preds == 1]
+        anomaly_scores = percentiles[preds == 1]
+        if anomaly_idx.size:
+            axis.scatter(
+                anomaly_idx,
+                anomaly_scores,
+                color='#d62728',
+                s=14,
+                zorder=3
+            )
+            any_points = True
+
+        cutoff = result.get('percentile_cutoff', 0.0)
+        if cutoff > 0:
+            axis.hlines(
+                cutoff,
+                x[0],
+                x[-1],
+                colors='#ff7f0e',
+                linestyles='--',
+                linewidth=0.8,
+                alpha=0.5
+            )
+
+        boundary_positions.append(offset + percentiles.size / 2.0)
+        boundary_labels.append(f'{result["log_name"]}\n(n={result["rows"]})')
+        offset += percentiles.size
+        axis.axvline(offset, color='#bbbbbb', linewidth=0.5, alpha=0.5)
+
+    if offset == 0:
+        axis.text(0.5, 0.5, 'No combined score data available', ha='center', va='center')
+        axis.set_axis_off()
+        return
+
+    if directory_summary is not None:
+        title = (
+            f'Combined Flow-by-Flow Normalized Scores  '
+            f'(directory score={directory_summary["score"]:.1f}/100, '
+            f'severity={directory_summary["severity"]})'
+        )
+    else:
+        title = 'Combined Flow-by-Flow Normalized Scores'
+
+    axis.set_title(title, fontsize=12)
+    axis.set_xlabel('Combined flow index across all files')
+    axis.set_ylabel('Within-file score percentile')
+    axis.set_ylim(0, 1.02)
+    axis.grid(True, alpha=0.25)
+    axis.set_xticks(boundary_positions)
+    axis.set_xticklabels(boundary_labels, rotation=35, ha='right', fontsize=8)
+
+    legend_items = [
+        plt.Line2D([0], [0], color='#1f77b4', linewidth=1.2, label='Normalized score line'),
+        plt.Line2D([0], [0], color='#ff7f0e', linestyle='--', linewidth=1.0, label='Per-file cutoff'),
+    ]
+    if any_points:
+        legend_items.append(
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#d62728', markersize=6, label='Anomalous flow')
+        )
+    axis.legend(handles=legend_items, loc='upper right', fontsize=8)
+
+
+def export_score_plots(path, input_path, file_results, directory_summary, baseline_comparison=None):
+    if plt is None or PdfPages is None:
+        raise ImportError(
+            'matplotlib is required for plot export. Install it and retry.'
+        )
+
+    output_path = Path(path)
+    if output_path.suffix.lower() != '.pdf':
+        raise ValueError('Plot export currently requires a .pdf output path.')
+
+    with PdfPages(output_path) as pdf:
+        summary_fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+        summary_fig.suptitle(f'Zeek Anomaly Score Summary\n{input_path}', fontsize=14)
+
+        component_names = ['weighted_top', 'weighted_fraction', 'uid_corr_score', 'weird_notice_bonus', 'fuid_bonus']
+        component_values = [directory_summary.get(name, 0.0) if directory_summary else 0.0 for name in component_names]
+        if directory_summary and 'behavior_score' in directory_summary:
+            component_names.append('behavior_score')
+            component_values.append(directory_summary.get('behavior_score', 0.0))
+
+        axes[0].bar(component_names, component_values, color='#4c78a8')
+        axes[0].set_ylim(0, max(1.0, max(component_values) * 1.15 if component_values else 1.0))
+        axes[0].set_ylabel('Normalized component value')
+        axes[0].set_title(
+            f'Directory score={directory_summary["score"]:.1f}/100, severity={directory_summary["severity"]}'
+            if directory_summary else 'Directory summary unavailable'
+        )
+        axes[0].tick_params(axis='x', rotation=20)
+        axes[0].grid(True, axis='y', alpha=0.25)
+
+        top_logs = directory_summary.get('top_logs', []) if directory_summary else []
+        labels = [result['log_name'] for result in top_logs]
+        contributions = [
+            get_log_weight(result['log_name']) * result['top_percentile_mean']
+            for result in top_logs
+        ]
+        axes[1].bar(labels, contributions, color='#59a14f')
+        axes[1].set_ylabel('Contribution')
+        axes[1].set_title('Top contributing log files')
+        axes[1].grid(True, axis='y', alpha=0.25)
+
+        summary_text = []
+        if baseline_comparison is not None:
+            summary_text.append(
+                f'Baseline verdict: {baseline_comparison["verdict"]} '
+                f'({baseline_comparison["normal_directories"]} normal directories)'
+            )
+            exceeded = baseline_comparison.get('exceeded_metrics', [])[:5]
+            if exceeded:
+                summary_text.extend(
+                    f'{item["metric"]}: {item["value"]:.3f} > {item["threshold"]:.3f}'
+                    for item in exceeded
+                )
+        if directory_summary and directory_summary.get('conn_scan_sources'):
+            summary_text.append('Behavioral outliers:')
+            summary_text.extend(
+                f'{item["src"]}: scan_score={item["scan_score"]:.3f}, '
+                f'dst_ports={item["unique_resp_ports"]}, '
+                f'max_sweep={item["max_dst_port_sweep"]}'
+                for item in directory_summary['conn_scan_sources'][:3]
+            )
+        if summary_text:
+            summary_fig.text(0.02, 0.02, '\n'.join(summary_text), fontsize=9, va='bottom')
+
+        summary_fig.tight_layout(rect=(0, 0.06, 1, 0.95))
+        pdf.savefig(summary_fig)
+        plt.close(summary_fig)
+
+        combined_fig, combined_axis = plt.subplots(figsize=(14, 6))
+        _plot_combined_scores(combined_axis, file_results, directory_summary)
+        combined_fig.tight_layout()
+        pdf.savefig(combined_fig)
+        plt.close(combined_fig)
+
+        for result in file_results:
+            fig, axis = plt.subplots(figsize=(12, 5))
+            _plot_file_scores(axis, result)
+            fig.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
+
+
 def export_json_summary(path, input_path, file_results, directory_summary, baseline_comparison=None):
     payload = {
         'input_path': input_path,
@@ -1677,6 +1900,9 @@ if __name__ == '__main__':
     parser.add_argument('-J', '--jsonsummary',
                         help='Write a JSON summary with per-file results and the directory score.',
                         required=False)
+    parser.add_argument('-P', '--plotfile',
+                        help='Write a multi-page PDF with flow-by-flow score plots for each log and a final summary page.',
+                        required=False)
     parser.add_argument('-N', '--normal-dir',
                         help='Known-normal Zeek directory used to train baseline thresholds. Repeat for multiple directories.',
                         action='append',
@@ -1723,6 +1949,15 @@ if __name__ == '__main__':
     if args.jsonsummary:
         export_json_summary(
             args.jsonsummary,
+            input_path,
+            file_results,
+            directory_summary,
+            baseline_comparison
+        )
+
+    if args.plotfile:
+        export_score_plots(
+            args.plotfile,
             input_path,
             file_results,
             directory_summary,

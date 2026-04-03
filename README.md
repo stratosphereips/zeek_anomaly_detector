@@ -794,6 +794,35 @@ Each file entry contains:
 - Total rows
 - Number and fraction of anomalous rows
 - Top anomaly score statistics
+
+### Export Score Plots
+
+Write a multi-page PDF with flow-by-flow score plots for each log plus a final summary page:
+
+```bash
+python3 zeek-anomaly-detector.py -d /path/to/zeek/logs -P scores.pdf
+```
+
+The PDF contains:
+
+- One summary page with the final directory score and the main score components
+- One combined flow-by-flow page across all log files
+- One score plot per Zeek log file
+
+Each per-file plot shows:
+
+- A blue line for the score of every flow or row, in file order
+- Red markers for the rows flagged as anomalous
+- An orange dashed cutoff line for the last displayed anomaly score
+
+The combined page shows:
+
+- All rows from all files on one shared timeline
+- Within-file normalized score percentiles on the y-axis, so different log types can be compared fairly
+- File boundaries and labels on the x-axis
+- Red markers for anomalous rows across the whole run
+
+This is useful when you want to see whether anomalies are isolated spikes, repeated bursts, or broad campaigns across a file.
 - Detector method
 - Feature columns used
 - Related anomalous `uid` and `fuid` values
