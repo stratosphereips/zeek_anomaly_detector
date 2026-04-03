@@ -2,3 +2,5 @@
 *.log
 *.swp
 .DS_store
+__pycache__/
+zeek-anomaly-detector.sh
