@@ -8,7 +8,7 @@ An anomaly detector for Zeek logs. It supports both classic Zeek TSV logs and li
 
 This is no longer a `conn.log`-only PCA script. The current implementation does all of the following:
 
-- Reads `conn.log`, `http.log`, `files.log`, `ssh.log`, `weird.log`, `notice.log`, `known_services.log`, `known_hosts.log`, `software.log`, `arp.log`, `stats.log`, `capture_loss.log`, `packet_filter.log`, `loaded_scripts.log`, and any other Zeek logs that match the supported schemas.
+- Reads `conn.log`, `http.log`, `files.log`, `ssh.log`, `weird.log`, `notice.log`, `known_services.log`, `known_hosts.log`, `software.log`, `arp.log`, `stats.log`, `capture_loss.log`, `packet_filter.log`, and any other Zeek logs that match the supported schemas.
 - Auto-detects input format as Zeek TSV or Zeek JSON.
 - Processes a full directory of `.log` files with one command.
 - Builds shared context across logs using `uid` and `fuid`.
@@ -127,7 +127,7 @@ The main components are:
 
 - For each log, the tool computes the mean percentile rank of the top anomalous rows inside that log
 - Those values are weighted by log importance
-- Attack-relevant logs such as `conn`, `http`, `files`, `tls`, `weird`, and `notice` have higher weight than inventory logs such as `known_hosts` or `loaded_scripts`
+- Attack-relevant logs such as `conn`, `http`, `files`, `tls`, `weird`, and `notice` have higher weight than inventory logs such as `known_hosts`
 
 2. `uid_correlation`
 
@@ -632,19 +632,15 @@ Main features include:
 - Filter rarity
 - Node rarity
 
-### `loaded_scripts.log`
+### Ignored Logs
 
-Technique: rarity scoring
+`loaded_scripts.log` is ignored completely.
 
 Why:
 
-- This is Zeek runtime metadata.
-- The useful signal is unusual script-path appearance.
-
-Main features include:
-
-- Script-path rarity
-- Script-path length
+- It reflects Zeek runtime configuration, not network behavior.
+- In practice it tends to add noise to directory summaries and plots without helping attack detection.
+- If you keep it in a Zeek directory, it is skipped before loading, so it does not affect anomalies, JSON output, plots, or the final directory score.
 
 ## Output Semantics
 
@@ -858,7 +854,6 @@ These logs are still processed, but the interpretation is different:
 - `known_services.log`
 - `software.log`
 - `packet_filter.log`
-- `loaded_scripts.log`
 - `stats.log`
 - `capture_loss.log`
 

@@ -67,7 +67,10 @@ LOG_WEIGHTS = {
     'known_hosts': 0.25,
     'software': 0.30,
     'packet_filter': 0.10,
-    'loaded_scripts': 0.10,
+}
+
+IGNORED_LOG_STEMS = {
+    'loaded_scripts',
 }
 
 ANSI = {
@@ -126,12 +129,14 @@ def iter_log_files(path):
     input_path = Path(path)
 
     if input_path.is_file():
+        if input_path.stem in IGNORED_LOG_STEMS:
+            return []
         return [input_path]
 
     if input_path.is_dir():
         return sorted(
             child for child in input_path.iterdir()
-            if child.is_file() and child.suffix == '.log'
+            if child.is_file() and child.suffix == '.log' and child.stem not in IGNORED_LOG_STEMS
         )
 
     raise FileNotFoundError(f'Input path not found: {path}')
@@ -1840,6 +1845,10 @@ def export_json_summary(path, input_path, file_results, directory_summary, basel
 
 def analyze_directory(input_path, amountanom, dumptocsv, verbosity=0, debug=0, print_output=True):
     log_files = iter_log_files(input_path)
+    if print_output and Path(input_path).is_file() and Path(input_path).stem in IGNORED_LOG_STEMS:
+        print(f"Skipping {Path(input_path).name}: configured to be ignored.")
+        return [], None, False
+
     log_frames = {}
     skipped_empty_logs = []
     for log_file in log_files:
