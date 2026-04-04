@@ -6,6 +6,8 @@
 
 An anomaly detector for Zeek logs. It supports both classic Zeek TSV logs and line-delimited Zeek JSON logs, can process a single log or a directory of logs, and applies different anomaly detection strategies depending on the log type.
 
+For a full architecture and methodology walkthrough, open [`docs/tool-explainer.html`](docs/tool-explainer.html) in a browser. That page explains the end-to-end data flow, feature engineering, models, directory scoring, baseline training, outputs, and design rationale in one place.
+
 This is no longer a `conn.log`-only PCA script. The current implementation does all of the following:
 
 - Reads `conn.log`, `http.log`, `files.log`, `ssh.log`, `weird.log`, `notice.log`, `known_services.log`, `known_hosts.log`, `software.log`, `arp.log`, `stats.log`, `capture_loss.log`, `packet_filter.log`, and any other Zeek logs that match the supported schemas.

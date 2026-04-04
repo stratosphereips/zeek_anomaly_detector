@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zeek Anomaly Detector Explained</title>
+  <style>
+    :root {
+      --bg: #f5f2ea;
+      --paper: #fffdf8;
+      --ink: #182026;
+      --muted: #59656f;
+      --line: #d8cdbf;
+      --accent: #0f766e;
+      --accent-2: #b45309;
+      --accent-3: #9f1239;
+      --soft: #efe7d8;
+      --code: #1f2937;
+      --shadow: 0 12px 40px rgba(24, 32, 38, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.10), transparent 28%),
+        radial-gradient(circle at top right, rgba(180, 83, 9, 0.10), transparent 24%),
+        linear-gradient(180deg, #f8f4ec 0%, var(--bg) 100%);
+      color: var(--ink);
+      line-height: 1.65;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(15, 118, 110, 0.94), rgba(24, 32, 38, 0.94));
+      color: #f8fafc;
+      border-radius: 24px;
+      padding: 40px 32px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      top: -50px;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2.2rem, 4vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .hero p {
+      max-width: 860px;
+      margin: 0 0 16px;
+      font-size: 1.1rem;
+      color: rgba(248, 250, 252, 0.92);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .hero-chip {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 24px;
+      margin-top: 24px;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 18px;
+      background: rgba(255, 253, 248, 0.92);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .toc h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .toc a {
+      display: block;
+      padding: 6px 0;
+      text-decoration: none;
+      color: var(--ink);
+      font-size: 0.97rem;
+    }
+
+    .toc a:hover {
+      color: var(--accent);
+    }
+
+    .content section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 28px;
+      margin-bottom: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .content h2 {
+      margin-top: 0;
+      font-size: 1.8rem;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .content h3 {
+      margin-top: 28px;
+      margin-bottom: 8px;
+      font-size: 1.15rem;
+    }
+
+    .lede {
+      font-size: 1.06rem;
+      color: var(--muted);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      background: #fbf7ef;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .metric {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .flow {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: #faf6ee;
+      border: 1px solid var(--line);
+    }
+
+    .flow-num {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+    }
+
+    .tag-list,
+    .bullet-list {
+      padding-left: 20px;
+      margin: 10px 0 0;
+    }
+
+    .codeblock,
+    pre {
+      background: var(--code);
+      color: #f9fafb;
+      padding: 16px 18px;
+      border-radius: 16px;
+      overflow-x: auto;
+      font-size: 0.93rem;
+      line-height: 1.55;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 0.88rem;
+      border: 1px solid var(--line);
+      background: #f9f4ea;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent-2);
+      background: #fff5e8;
+      padding: 14px 16px;
+      border-radius: 0 14px 14px 0;
+      margin: 18px 0;
+    }
+
+    .danger {
+      border-left-color: var(--accent-3);
+      background: #fff0f4;
+    }
+
+    .footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-top: 26px;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .toc {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>Zeek Anomaly Detector Explained</h1>
+      <p>
+        This page documents the full design of the tool: what data it reads, how it builds features,
+        how it correlates Zeek logs through <code>uid</code> and <code>fuid</code>, which anomaly-detection
+        techniques it applies to each log type, how the directory score is constructed, how the normal
+        baseline works, and why those design choices were made.
+      </p>
+      <div class="hero-grid">
+        <div class="hero-chip"><strong>Inputs:</strong> Zeek TSV and Zeek JSON</div>
+        <div class="hero-chip"><strong>Modes:</strong> single log or whole directory</div>
+        <div class="hero-chip"><strong>Core idea:</strong> one detector does not fit every Zeek log</div>
+        <div class="hero-chip"><strong>Outputs:</strong> anomalies, directory score, JSON, PDF, summary line</div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav class="toc">
+        <h2>Contents</h2>
+        <a href="#purpose">Purpose</a>
+        <a href="#inputs">Input Data</a>
+        <a href="#pipeline">Processing Pipeline</a>
+        <a href="#correlation">Cross-Log Correlation</a>
+        <a href="#features">Feature Engineering</a>
+        <a href="#models">Models and Scoring</a>
+        <a href="#directory-score">Directory Maliciousness Score</a>
+        <a href="#baseline">Normal Baseline Training</a>
+        <a href="#outputs">Outputs and Interfaces</a>
+        <a href="#decisions">Design Decisions</a>
+        <a href="#usage">How to Use</a>
+      </nav>
+
+      <main class="content">
+        <section id="purpose">
+          <h2>Purpose</h2>
+          <p class="lede">
+            The tool is built to analyze Zeek logs as an investigation set, not just as isolated files.
+            Its goal is to rank suspicious flows, transactions, files, events, and operational states,
+            then summarize the whole directory as a directory-level maliciousness score.
+          </p>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="metric">What it is not</div>
+              <p>
+                It is not a single global unsupervised model applied blindly to every Zeek schema.
+                Zeek logs describe very different things: flows, web transactions, files, inventories,
+                alerts, telemetry, and runtime state.
+              </p>
+            </div>
+            <div class="card">
+              <div class="metric">What it is</div>
+              <p>
+                It is a multi-stage analysis pipeline with log-specific feature builders, log-specific
+                scorers, cross-log context, and a final directory-level aggregation step.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="inputs">
+          <h2>Input Data</h2>
+          <p class="lede">
+            The detector accepts either one Zeek log file or a whole directory of Zeek logs.
+            It auto-detects the on-disk format.
+          </p>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>Supported file formats</h3>
+              <ul class="bullet-list">
+                <li>Classic Zeek TSV logs with <code>#fields</code> headers</li>
+                <li>Line-delimited Zeek JSON logs</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Common log types</h3>
+              <ul class="bullet-list">
+                <li><code>conn.log</code>, <code>http.log</code>, <code>dns.log</code>, <code>files.log</code></li>
+                <li><code>ssh.log</code>, <code>tls.log</code>, <code>ssl.log</code></li>
+                <li><code>weird.log</code>, <code>notice.log</code>, <code>stats.log</code></li>
+                <li><code>known_hosts.log</code>, <code>known_services.log</code>, <code>software.log</code></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="callout danger">
+            <strong>Ignored by design:</strong> <code>loaded_scripts.log</code> is skipped completely.
+            It reflects Zeek runtime configuration rather than network behavior, and it adds noise to
+            summaries and plots without helping malicious-traffic detection.
+          </div>
+        </section>
+
+        <section id="pipeline">
+          <h2>Processing Pipeline</h2>
+          <p class="lede">
+            The tool follows a structured sequence so that log-specific scoring can still benefit from
+            directory-wide context.
+          </p>
+
+          <div class="flow">
+            <div class="flow-step">
+              <div class="flow-num">1</div>
+              <div>
+                <h3>Discover logs</h3>
+                <p>
+                  In directory mode, the tool enumerates <code>.log</code> files, skips ignored logs,
+                  and skips empty files cleanly rather than aborting the whole run.
+                </p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">2</div>
+              <div>
+                <h3>Load data</h3>
+                <p>
+                  Each file is loaded as a pandas DataFrame. TSV logs use Zeek headers when available.
+                  JSON logs are parsed as line-delimited records.
+                </p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">3</div>
+              <div>
+                <h3>Build shared context</h3>
+                <p>
+                  Before scoring any file, the tool constructs directory-wide context from all loaded logs.
+                  This creates per-<code>uid</code> aggregates and file metadata lookups used later by
+                  <code>conn</code>, <code>http</code>, <code>files</code>, <code>dns</code>, <code>ssh</code>,
+                  and other feature builders.
+                </p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">4</div>
+              <div>
+                <h3>Engineer features per log type</h3>
+                <p>
+                  Each log type gets a different feature builder. The builders generate numeric features,
+                  categorical rarity scores, cross-log counts, ratios, lexical measures, or time-series
+                  derivatives depending on what the schema means.
+                </p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">5</div>
+              <div>
+                <h3>Apply a log-specific scorer</h3>
+                <p>
+                  The tool picks a scorer per log family: multivariate Isolation Forest, hybrid DNS logic,
+                  hybrid connection scan logic, rarity scoring, time-series deviation scoring, or a fallback
+                  distance method when the feature space is too small.
+                </p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">6</div>
+              <div>
+                <h3>Produce per-file anomaly rankings</h3>
+                <p>
+                  Each file returns row-level scores, predicted anomalous rows, score percentiles, and
+                  metadata for printing, plotting, and JSON export.
+                </p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">7</div>
+              <div>
+                <h3>Build a directory-level maliciousness score</h3>
+                <p>
+                  The final score combines the strongest per-file anomaly concentration, cross-log overlap,
+                  weird/notice bonuses, HTTP-file overlap, and an explicit connection-behavior scan profile.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="correlation">
+          <h2>Cross-Log Correlation</h2>
+          <p class="lede">
+            A large part of the tool’s value comes from correlating related records across Zeek logs.
+          </p>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3><code>uid</code> correlation</h3>
+              <p>
+                <code>uid</code> is Zeek’s transaction identifier. The tool uses it to aggregate
+                context such as related connection bytes, HTTP counts, file counts, weird-event counts,
+                SSH authentication attempts, duration, and connection-state rarity.
+              </p>
+              <div class="pill-row">
+                <div class="pill">uid_log_types</div>
+                <div class="pill">uid_http_count</div>
+                <div class="pill">uid_files_count</div>
+                <div class="pill">uid_weird_count</div>
+                <div class="pill">uid_conn_bytes</div>
+                <div class="pill">uid_conn_duration</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3><code>fuid</code> correlation</h3>
+              <p>
+                <code>fuid</code> is Zeek’s file identifier. The detector uses it mainly to enrich
+                <code>http.log</code> with linked file counts, linked file bytes, and linked MIME rarity
+                from <code>files.log</code>.
+              </p>
+              <div class="pill-row">
+                <div class="pill">linked_file_count</div>
+                <div class="pill">linked_file_bytes</div>
+                <div class="pill">linked_file_mime_rarity</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout">
+            <strong>Why this matters:</strong> a weak anomaly in one log can become much more meaningful
+            when it shares a <code>uid</code> with odd HTTP behavior, a suspicious file transfer, or a
+            weird event. This is one reason directory mode is more informative than analyzing a single file.
+          </div>
+        </section>
+
+        <section id="features">
+          <h2>Feature Engineering</h2>
+          <p class="lede">
+            Features are engineered to match the semantics of each Zeek log. Some logs are true flows.
+            Some are sparse metadata. Some are telemetry. Some are already alert-like.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Log</th>
+                  <th>Main engineered features</th>
+                  <th>Why those features matter</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>conn.log</code></td>
+                  <td>bytes, packets, duration, destination port, state rarity, history flags, short-connection flags, zero-payload flags, source-level port sweep behavior</td>
+                  <td>Captures scans, failed probes, bursty connection patterns, and odd multivariate flow combinations</td>
+                </tr>
+                <tr>
+                  <td><code>http.log</code></td>
+                  <td>URI length, query depth, status rarity, request and response sizes, method rarity, linked file counts and bytes via <code>fuid</code>, related <code>uid</code> context</td>
+                  <td>Captures unusual web transactions, downloads, and HTTP-file relationships</td>
+                </tr>
+                <tr>
+                  <td><code>dns.log</code></td>
+                  <td>query length, entropy, digit ratio, vowel ratio, unique-character ratio, DGA-like flags, repeated DGA-like source behavior, response absence, rejection indicators</td>
+                  <td>Separates suspicious lexical DNS behavior from common local-discovery noise</td>
+                </tr>
+                <tr>
+                  <td><code>files.log</code></td>
+                  <td>total bytes, seen bytes, duration, MIME rarity, source flags, related HTTP and connection context</td>
+                  <td>Captures odd transferred files, unusual MIME types, and download context</td>
+                </tr>
+                <tr>
+                  <td><code>ssh.log</code></td>
+                  <td>banner rarity, auth attempts, related connection context, weird-event context</td>
+                  <td>Captures sparse but useful metadata for SSH probing and odd negotiation behavior</td>
+                </tr>
+                <tr>
+                  <td><code>tls.log</code> / <code>ssl.log</code></td>
+                  <td>cipher and version metadata, SNI-related rarity, basic session metadata, connection context</td>
+                  <td>Captures unusual TLS sessions and strange service combinations</td>
+                </tr>
+                <tr>
+                  <td><code>weird.log</code> / <code>notice.log</code></td>
+                  <td>event-name rarity, notice linkage, related transaction context</td>
+                  <td>These logs already describe exceptional states, so rarity and prioritization matter most</td>
+                </tr>
+                <tr>
+                  <td><code>stats.log</code></td>
+                  <td>bytes per packet, events per packet, queue pressure, TCP/UDP/ICMP shares, file and DNS pressure, reassembly pressure, memory and queue deltas</td>
+                  <td>Turns raw telemetry into operational pressure features instead of naive raw-counter outliers</td>
+                </tr>
+                <tr>
+                  <td>inventory logs</td>
+                  <td>host, service, software, ARP, packet-filter rarity and drift-style indicators</td>
+                  <td>These logs are more useful for novelty and drift than for direct flow outliers</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="models">
+          <h2>Models and Scoring Techniques</h2>
+          <p class="lede">
+            Different Zeek logs are scored differently because their statistical structure differs.
+          </p>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>Isolation Forest</h3>
+              <p>
+                Used where multivariate numeric behavior makes sense, especially for rich transaction logs.
+                It is appropriate when anomalies are unusual combinations of otherwise normal-looking fields.
+              </p>
+              <ul class="bullet-list">
+                <li>Primary use: <code>conn.log</code>, <code>http.log</code>, <code>files.log</code>, some TLS-style logs</li>
+                <li>Score meaning: more isolated rows get higher anomaly score</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Rarity scoring</h3>
+              <p>
+                Used for event-like or inventory-like logs where the strongest signal is not geometric distance
+                but uncommon values, combinations, or states.
+              </p>
+              <ul class="bullet-list">
+                <li>Primary use: <code>weird</code>, <code>notice</code>, <code>known_hosts</code>, <code>known_services</code>, <code>software</code>, <code>arp</code>, <code>packet_filter</code></li>
+                <li>Score meaning: rarer rows score higher</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Hybrid DNS scoring</h3>
+              <p>
+                DNS uses custom logic rather than a generic unsupervised model. It explicitly boosts DGA-like
+                lexical behavior, repeated suspicious query behavior per source, missing answers, and rejection
+                patterns, while downweighting benign local-discovery traffic.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Hybrid connection scoring</h3>
+              <p>
+                <code>conn.log</code> combines a multivariate baseline with explicit scan-behavior bonuses
+                so that broad port sweeps and failed probe campaigns surface more clearly.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Time-series deviation scoring</h3>
+              <p>
+                Telemetry logs such as <code>stats.log</code> and <code>capture_loss.log</code> use deviation
+                scoring over levels and changes because their rows are not independent flows.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Fallback distance</h3>
+              <p>
+                When the feature space is too small or degenerate for the intended model, the tool falls back
+                to a stable distance-style score rather than failing outright.
+              </p>
+            </div>
+          </div>
+
+          <div class="callout">
+            <strong>Important:</strong> every detector yields a numeric score, but these scores are not
+            calibrated across different log types. A <code>conn.log</code> score should not be compared directly
+            to a <code>dns.log</code> score. Within-file percentile ranks are used where cross-file comparison is needed.
+          </div>
+        </section>
+
+        <section id="directory-score">
+          <h2>Directory Maliciousness Score</h2>
+          <p class="lede">
+            The final directory score is not a raw sum of anomaly scores. It is a weighted summary of several
+            normalized behaviors.
+          </p>
+
+          <div class="codeblock"><code>core_score = 100 * (
+  0.35 * weighted_top +
+  0.25 * uid_corr_score +
+  0.20 * weighted_fraction +
+  0.15 * weird_notice_bonus +
+  0.05 * fuid_bonus
+)
+
+directory_score = min(100, core_score + 45 * behavior_score)</code></div>
+
+          <h3>What the components mean</h3>
+          <ul class="bullet-list">
+            <li><strong>weighted_top:</strong> how strong the top anomalies are inside each file, after weighting by log importance</li>
+            <li><strong>weighted_fraction:</strong> how much anomaly mass is spread across each file, again weighted by log importance</li>
+            <li><strong>uid_corr_score:</strong> how many anomalous <code>uid</code> values are shared across multiple log types</li>
+            <li><strong>weird_notice_bonus:</strong> extra weight when already-exceptional logs contribute anomalous rows</li>
+            <li><strong>fuid_bonus:</strong> extra weight when anomalous HTTP rows overlap with anomalous files through <code>fuid</code></li>
+            <li><strong>behavior_score:</strong> explicit source-level scan behavior from <code>conn.log</code></li>
+          </ul>
+
+          <h3>Why the behavior score exists</h3>
+          <p>
+            Some attack directories, especially simple scans, do not generate much <code>uid</code> overlap into
+            higher-level logs. A separate behavior stage over <code>conn.log</code> captures source fan-out,
+            failed-connection fraction, short-connection fraction, zero-payload fraction, and maximum per-host
+            port sweep. This is what allows the detector to recognize broad scan campaigns as strongly malicious
+            even when the higher-level logs are sparse.
+          </p>
+        </section>
+
+        <section id="baseline">
+          <h2>Normal Baseline Training</h2>
+          <p class="lede">
+            The baseline logic is designed for the reality that “normal” Zeek directories still vary a lot.
+          </p>
+
+          <h3>Why not train on raw anomaly scores?</h3>
+          <p>
+            Raw row-level scores vary across log types, detector families, traffic volumes, and capture duration.
+            Training thresholds directly on those values would be unstable and hard to interpret.
+          </p>
+
+          <h3>What is actually trained</h3>
+          <p>
+            The tool learns thresholds from directory-summary metrics such as:
+          </p>
+          <ul class="bullet-list">
+            <li><code>score</code></li>
+            <li><code>weighted_top</code></li>
+            <li><code>weighted_fraction</code></li>
+            <li><code>uid_corr_score</code></li>
+            <li><code>weird_notice_bonus</code></li>
+            <li><code>fuid_bonus</code></li>
+            <li><code>behavior_score</code></li>
+            <li><code>conn_scan_score</code></li>
+            <li>cross-log overlap counts</li>
+          </ul>
+
+          <h3>How thresholds are learned</h3>
+          <ul class="bullet-list">
+            <li>With multiple normal directories, the tool uses robust statistics: median and MAD-based upper bounds</li>
+            <li>With very few normal directories, it falls back to conservative upper margins above observed normals</li>
+          </ul>
+
+          <div class="callout">
+            <strong>Interpretation:</strong> the baseline comparison is not asking “is this exact row anomalous?”
+            It is asking whether the directory’s aggregate behavior exceeds what was observed in known-normal directories.
+          </div>
+        </section>
+
+        <section id="outputs">
+          <h2>Outputs and Interfaces</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Default terminal mode</h3>
+              <p>
+                Prints anomaly tables per file and, in directory mode, prints a final directory summary and optional baseline comparison.
+              </p>
+            </div>
+            <div class="card">
+              <h3><code>--summary-line</code></h3>
+              <p>
+                Suppresses the normal terminal output and prints one final tab-separated line with input path,
+                score, severity, and baseline verdict if present. In ANSI-capable terminals, the score and verdict
+                fields are colorized.
+              </p>
+            </div>
+            <div class="card">
+              <h3>JSON export</h3>
+              <p>
+                Exports per-file summaries, anomalous identifiers, top rows, directory summary, and optional baseline comparison.
+              </p>
+            </div>
+            <div class="card">
+              <h3>PDF plot export</h3>
+              <p>
+                Exports a summary page, a combined flow-by-flow normalized score page, and one score plot per analyzed log file.
+                When a baseline is present, the summary plot overlays suspect bars, normal medians, and normal thresholds.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="decisions">
+          <h2>Design Decisions and Why They Were Made</h2>
+          <ul class="bullet-list">
+            <li><strong>Per-log detectors instead of one model:</strong> because Zeek logs have incompatible semantics</li>
+            <li><strong>Cross-log context before scoring:</strong> because many attacks are only obvious when logs are tied together</li>
+            <li><strong>Explicit DNS and scan logic:</strong> because generic unsupervised scoring often misses DGAs and simple sweeps</li>
+            <li><strong>Directory-level scoring from normalized components:</strong> because raw anomaly scores do not compare cleanly across logs</li>
+            <li><strong>Robust baseline training:</strong> because normal traffic varies and naive fixed thresholds are brittle</li>
+            <li><strong>Ignore <code>loaded_scripts.log</code>:</strong> because runtime configuration noise was hurting detection quality more than helping</li>
+          </ul>
+
+          <div class="callout danger">
+            <strong>What the tool does not claim:</strong> the final directory score is not a calibrated probability
+            of compromise. It is a triage-oriented maliciousness score meant to help rank directories and focus analyst attention.
+          </div>
+        </section>
+
+        <section id="usage">
+          <h2>How to Use</h2>
+          <h3>Single file</h3>
+          <pre><code>python3 zeek-anomaly-detector.py -f conn.log</code></pre>
+
+          <h3>Directory analysis</h3>
+          <pre><code>python3 zeek-anomaly-detector.py -d /path/to/zeek</code></pre>
+
+          <h3>With normal baseline</h3>
+          <pre><code>python3 zeek-anomaly-detector.py \
+  -d /path/to/suspect \
+  -N /path/to/normal1 \
+  -N /path/to/normal2</code></pre>
+
+          <h3>One-line final summary</h3>
+          <pre><code>python3 zeek-anomaly-detector.py \
+  -d /path/to/suspect \
+  -N /path/to/normal1 \
+  --summary-line</code></pre>
+
+          <h3>Export JSON and plots</h3>
+          <pre><code>python3 zeek-anomaly-detector.py \
+  -d /path/to/zeek \
+  -J summary.json \
+  -P scores.pdf</code></pre>
+
+          <p>
+            For the implementation details and CLI reference, also see
+            <a href="../README.md">README.md</a>.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <p class="footer">
+      Local documentation page for the Zeek Anomaly Detector. Open this file directly in a browser from the repository.
+    </p>
+  </div>
+</body>
+</html>
