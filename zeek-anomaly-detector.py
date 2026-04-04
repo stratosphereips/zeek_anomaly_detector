@@ -1564,6 +1564,27 @@ def print_baseline_comparison(comparison):
         )
 
 
+def format_summary_line(summary, input_path, baseline_comparison=None):
+    score_text = style(f'{summary["score"]:.1f}/100', summary['color'], bold=True)
+    severity_text = style(summary["severity"], summary['color'], bold=True)
+    line = (
+        f'{input_path}\t'
+        f'score={score_text}\t'
+        f'severity={severity_text}'
+    )
+    if baseline_comparison is not None:
+        baseline_text = style(
+            baseline_comparison["verdict"],
+            baseline_comparison['color'],
+            bold=True
+        )
+        line += (
+            f'\tbaseline={baseline_text}'
+            f'\tnormals={baseline_comparison["normal_directories"]}'
+        )
+    return line
+
+
 def _plot_file_scores(axis, result):
     scores = np.asarray(result.get('score_values', []), dtype=float)
     preds = np.asarray(result.get('pred_values', []), dtype=int)
@@ -1964,26 +1985,30 @@ if __name__ == '__main__':
                         help='Known-normal Zeek directory used to train baseline thresholds. Repeat for multiple directories.',
                         action='append',
                         required=False)
+    parser.add_argument('--summary-line',
+                        help='Directory mode only. Print only one final summary line with the directory score and optional baseline verdict.',
+                        action='store_true',
+                        required=False)
     args = parser.parse_args()
 
-    if args.verbose or args.debug:
+    if (args.verbose or args.debug) and not args.summary_line:
         print('Zeek Anomaly Detector: per-log anomaly detection for Zeek logs.')
         print('Author: Sebastian Garcia (eldraco@gmail.com)')
         print('        Veronica Valeros (vero.valeros@gmail.com)')
 
     input_path = args.file or args.directory
+    summary_line_mode = bool(args.summary_line and args.directory)
     file_results, directory_summary, found_any_anomalies = analyze_directory(
         input_path,
         args.amountanom,
         args.dumptocsv,
         args.verbose or 0,
         args.debug or 0,
-        print_output=True
+        print_output=not summary_line_mode
     )
 
     baseline_comparison = None
     if args.directory and file_results:
-        print_directory_summary(directory_summary, args.directory)
         if args.normal_dir:
             normal_summaries = []
             for normal_dir in args.normal_dir:
@@ -2000,6 +2025,11 @@ if __name__ == '__main__':
 
             baseline = build_normal_baseline(normal_summaries)
             baseline_comparison = compare_against_baseline(directory_summary, baseline)
+
+        if summary_line_mode:
+            print(format_summary_line(directory_summary, args.directory, baseline_comparison))
+        else:
+            print_directory_summary(directory_summary, args.directory)
             if baseline_comparison is not None:
                 print_baseline_comparison(baseline_comparison)
 
@@ -2021,5 +2051,5 @@ if __name__ == '__main__':
             baseline_comparison
         )
 
-    if (args.verbose or args.debug) and not found_any_anomalies:
+    if (args.verbose or args.debug) and not args.summary_line and not found_any_anomalies:
         print('No anomalies detected.')

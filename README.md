@@ -214,6 +214,24 @@ python3 zeek-anomaly-detector.py \
   -N /path/to/normal3
 ```
 
+If you only want a single final line for the directory score, use `--summary-line`:
+
+```bash
+python3 zeek-anomaly-detector.py \
+  -d /path/to/suspect/zeek \
+  --summary-line
+```
+
+With a normal baseline, the same one-line output also includes the baseline verdict:
+
+```bash
+python3 zeek-anomaly-detector.py \
+  -d /path/to/suspect/zeek \
+  -N /path/to/normal1 \
+  -N /path/to/normal2 \
+  --summary-line
+```
+
 #### Best way to train when normal traffic varies
 
 The best approach is not to learn a hard threshold from a single raw anomaly score. Normal Zeek directories vary naturally because of:
@@ -254,6 +272,14 @@ When `--normal-dir` is used, the final output includes a `Baseline Comparison` s
 - `ABOVE NORMAL BASELINE`
 
 It also prints which summary metrics exceeded the learned normal thresholds.
+
+When `--summary-line` is used, the normal terminal output is suppressed and replaced by one final tab-separated line with:
+
+- Input path
+- Final directory score, colorized in terminals that support ANSI colors
+- Severity, colorized in terminals that support ANSI colors
+- Baseline verdict, if `--normal-dir` was used, also colorized in ANSI-capable terminals
+- Number of normal directories used for the baseline, if any
 
 ## Techniques By Log Type
 
