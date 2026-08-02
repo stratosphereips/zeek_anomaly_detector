@@ -43,6 +43,11 @@ try:
 except ImportError:  # pragma: no cover - optional dependency at runtime
     IsolationForest = None
 
+try:
+    from pyod.models.pca import PCA
+except ImportError:  # pragma: no cover - optional dependency at runtime
+    PCA = None
+
 
 DEFAULT_CONN_COLUMNS = [
     'ts', 'uid', 'id.orig_h', 'id.orig_p',
@@ -499,6 +504,12 @@ def build_conn_features(df, context):
 
     features['id.resp_p'] = numeric_series(df, 'id.resp_p')
     features['duration'] = duration
+    features['orig_bytes'] = orig_bytes
+    features['resp_bytes'] = resp_bytes
+    features['orig_ip_bytes'] = numeric_series(df, 'orig_ip_bytes')
+    features['resp_pkts'] = resp_pkts
+    features['resp_ip_bytes'] = numeric_series(df, 'resp_ip_bytes')
+    features['ip_proto'] = numeric_series(df, 'ip_proto')
     features['total_bytes'] = orig_bytes + resp_bytes
     features['total_pkts'] = orig_pkts + resp_pkts
     features['orig_resp_bytes_ratio'] = safe_divide(orig_bytes + 1, resp_bytes + 1)
@@ -541,7 +552,7 @@ def build_conn_features(df, context):
         'uid_ssh_count', 'uid_weird_count', 'uid_file_total_bytes',
         'uid_weird_name_rarity'
     ])
-    return features, 'conn_hybrid'
+    return features, 'conn_pca'
 
 
 def build_http_features(df, context):
@@ -1150,12 +1161,39 @@ def score_conn_hybrid(features, amountanom):
     return scores, preds, used_cols, f'conn_hybrid+{base_method}'
 
 
+def score_conn_pca(features, amountanom):
+    """Reproduce the original conn.log PCA ranking on its eight flow fields."""
+    legacy_columns = [
+        'duration', 'orig_bytes', 'id.resp_p', 'resp_bytes',
+        'orig_ip_bytes', 'resp_pkts', 'resp_ip_bytes', 'ip_proto',
+    ]
+    available = [column for column in legacy_columns if column in features.columns]
+    matrix, used_cols = prepare_feature_matrix(features[available])
+    if matrix.empty:
+        return pd.Series(dtype=float), pd.Series(dtype=int), used_cols, 'none'
+
+    if PCA is not None and len(matrix.columns) >= 2 and len(matrix) >= 3:
+        values = matrix.values
+        model = PCA()
+        model.fit(values)
+        scores = pd.Series(model.decision_function(values), index=matrix.index)
+        preds = pd.Series(model.predict(values), index=matrix.index, dtype=int)
+        return scores, preds, used_cols, 'pca'
+
+    scores = standardized_distance_scores(matrix)
+    pred_index = scores.nlargest(min(amountanom, len(scores))).index
+    preds = pd.Series(0, index=matrix.index, dtype=int)
+    preds.loc[pred_index] = 1
+    return scores, preds, used_cols, 'pca_fallback_distance'
+
+
 SCORERS = {
     'isolation_forest': score_isolation_forest,
     'rarity': score_rarity,
     'timeseries': score_timeseries,
     'dns_hybrid': score_dns_hybrid,
     'conn_hybrid': score_conn_hybrid,
+    'conn_pca': score_conn_pca,
 }
 
 
