@@ -12,6 +12,7 @@ Zeek Anomaly Detector by the Stratosphere Laboratory
 import argparse
 import json
 import os
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -21,10 +22,17 @@ os.environ.setdefault('MPLCONFIGDIR', '/tmp/zeek-anomaly-detector-mpl')
 os.makedirs(os.environ['MPLCONFIGDIR'], exist_ok=True)
 
 try:
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore',
+            message=r'Unable to import Axes3D\..*',
+            category=UserWarning,
+            module=r'matplotlib\.projections',
+        )
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_pdf import PdfPages
 except ImportError:  # pragma: no cover - optional dependency at runtime
     matplotlib = None
     plt = None
@@ -87,16 +95,43 @@ class EmptyLogError(ValueError):
     """Raised when a Zeek log has no content rows to analyze."""
 
 
+class UnsupportedLogFormatError(ValueError):
+    """Raised when an input is not a supported text Zeek log."""
+
+
+PCAP_MAGIC_BYTES = {
+    b'\xd4\xc3\xb2\xa1',  # pcap, little endian
+    b'\xa1\xb2\xc3\xd4',  # pcap, big endian
+    b'\x4d\x3c\xb2\xa1',  # pcap, little endian (nanoseconds)
+    b'\xa1\xb2\x3c\x4d',  # pcap, big endian (nanoseconds)
+    b'\x0a\x0d\x0d\x0a',  # pcapng
+}
+
+
 def detect_log_format(file):
     """Return the log format based on the first non-empty line."""
-    with open(file, encoding='utf-8') as handle:
-        for line in handle:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if stripped.startswith('{') or stripped.startswith('['):
-                return 'json'
-            return 'tsv'
+    try:
+        with open(file, 'rb') as handle:
+            prefix = handle.read(4)
+        if prefix in PCAP_MAGIC_BYTES:
+            raise UnsupportedLogFormatError(
+                f'Input file {file} is a packet capture, not a Zeek log. '
+                'Run Zeek on the capture first, then analyze the directory '
+                'containing the generated .log files.'
+            )
+
+        with open(file, encoding='utf-8-sig') as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith('{') or stripped.startswith('['):
+                    return 'json'
+                return 'tsv'
+    except UnicodeDecodeError as error:
+        raise UnsupportedLogFormatError(
+            f'Input file {file} is not a UTF-8 Zeek TSV or JSON log.'
+        ) from error
     raise EmptyLogError(f'Input file {file} is empty.')
 
 
@@ -113,15 +148,20 @@ def load_zeek_log(file):
     """Load a Zeek log from either TSV or line-delimited JSON."""
     log_format = detect_log_format(file)
 
-    if log_format == 'json':
-        return pd.read_json(file, lines=True)
+    try:
+        if log_format == 'json':
+            return pd.read_json(file, lines=True)
 
-    return pd.read_csv(
-        file,
-        sep='\t',
-        comment='#',
-        names=get_tsv_columns(file)
-    )
+        return pd.read_csv(
+            file,
+            sep='\t',
+            comment='#',
+            names=get_tsv_columns(file)
+        )
+    except UnicodeDecodeError as error:
+        raise UnsupportedLogFormatError(
+            f'Input file {file} is not a UTF-8 Zeek TSV or JSON log.'
+        ) from error
 
 
 def iter_log_files(path):
@@ -1998,14 +2038,17 @@ if __name__ == '__main__':
 
     input_path = args.file or args.directory
     summary_line_mode = bool(args.summary_line and args.directory)
-    file_results, directory_summary, found_any_anomalies = analyze_directory(
-        input_path,
-        args.amountanom,
-        args.dumptocsv,
-        args.verbose or 0,
-        args.debug or 0,
-        print_output=not summary_line_mode
-    )
+    try:
+        file_results, directory_summary, found_any_anomalies = analyze_directory(
+            input_path,
+            args.amountanom,
+            args.dumptocsv,
+            args.verbose or 0,
+            args.debug or 0,
+            print_output=not summary_line_mode
+        )
+    except UnsupportedLogFormatError as error:
+        parser.error(str(error))
 
     baseline_comparison = None
     if args.directory and file_results:
