@@ -760,6 +760,17 @@ Show the top 20 anomalies:
 python3 zeek-anomaly-detector.py -f dataset/001-zeek-scenario-malicious/conn.log -a 20
 ```
 
+`-f` expects a text Zeek TSV or line-delimited JSON log; it does not accept a
+PCAP directly. To analyze a packet capture, generate Zeek logs first and then
+use directory mode:
+
+```bash
+mkdir zeek-output
+cd zeek-output
+zeek -r /path/to/capture.pcap
+python3 /path/to/zeek_anomaly_detector.py -d . -a 10
+```
+
 ### Directory Of Logs
 
 Run on a whole Zeek directory and score each log independently:
