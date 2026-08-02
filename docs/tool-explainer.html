@@ -453,8 +453,8 @@
               <div>
                 <h3>Apply a log-specific scorer</h3>
                 <p>
-                  The tool picks a scorer per log family: multivariate Isolation Forest, hybrid DNS logic,
-                  hybrid connection scan logic, rarity scoring, time-series deviation scoring, or a fallback
+                  The tool picks a scorer per log family: PCA flow scoring, multivariate Isolation Forest,
+                  hybrid DNS logic, rarity scoring, time-series deviation scoring, or a fallback
                   distance method when the feature space is too small.
                 </p>
               </div>
@@ -546,8 +546,8 @@
               <tbody>
                 <tr>
                   <td><code>conn.log</code></td>
-                  <td>bytes, packets, duration, destination port, state rarity, history flags, short-connection flags, zero-payload flags, source-level port sweep behavior</td>
-                  <td>Captures scans, failed probes, bursty connection patterns, and odd multivariate flow combinations</td>
+                  <td>originator/responder bytes, IP bytes, responder packets, duration, destination port, IP protocol</td>
+                  <td>Preserves the original PCA ranking of high-volume, long-duration, and otherwise exceptional flows</td>
                 </tr>
                 <tr>
                   <td><code>http.log</code></td>
@@ -632,10 +632,10 @@
               </p>
             </div>
             <div class="card">
-              <h3>Hybrid connection scoring</h3>
+              <h3>PCA connection scoring</h3>
               <p>
-                <code>conn.log</code> combines a multivariate baseline with explicit scan-behavior bonuses
-                so that broad port sweeps and failed probe campaigns surface more clearly.
+                <code>conn.log</code> uses the original detector's eight traffic fields and PyOD PCA.
+                Source-level scan behavior is evaluated separately in the directory behavior profile.
               </p>
             </div>
             <div class="card">
