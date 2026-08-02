@@ -4,3 +4,4 @@
 .DS_store
 __pycache__/
 zeek-anomaly-detector.sh
+pdf-outputs-results/
