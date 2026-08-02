@@ -91,8 +91,9 @@ This is useful when an HTTP request is suspicious because of what it delivered, 
 
 ### 3. Detector Selection By Log Type
 
-The implementation uses three detector families:
+The implementation uses four detector families:
 
+- PyOD `PCA` for `conn.log`, preserving the original flow-outlier ranking
 - `IsolationForest` for rich multivariate logs
 - Rarity scoring for event/inventory logs
 - Time-series deviation scoring for telemetry logs
@@ -287,32 +288,24 @@ When `--summary-line` is used, the normal terminal output is suppressed and repl
 
 ### `conn.log`
 
-Technique: `IsolationForest`
+Technique: PyOD `PCA`
 
 Why:
 
 - `conn.log` is the closest thing to classic flow anomaly detection.
-- Attacks often appear as unusual combinations of bytes, packets, ports, service, connection state, and duration.
-- Multivariate detection is more appropriate than per-feature thresholding.
+- PCA preserves the original detector's ranking of unusual flow-volume combinations.
+- Scan aggregation is handled separately by the directory behavior profile, so routine one-packet discovery traffic does not displace large per-flow outliers.
 
 Main features include:
 
 - Destination port
 - Duration
-- Total bytes
-- Total packets
-- Originator/responder byte ratio
-- Originator/responder packet ratio
-- Bytes per second
-- Bytes per packet
-- Port rarity
-- Service rarity
-- Connection-state rarity
-- History rarity
-- Destination-host popularity
-- Related `uid` context from HTTP, files, SSH, and weird logs
+- Originator and responder bytes
+- Originator and responder IP bytes
+- Responder packets
+- IP protocol
 
-This is the best log for finding scan activity, strange connection fan-out, failed probes, weird size ratios, or traffic that does not match the rest of the environment.
+This is the best log for finding unusual high-volume, long-duration, and otherwise exceptional flows. Source-level scan activity remains part of the directory summary.
 
 ### `http.log`
 
