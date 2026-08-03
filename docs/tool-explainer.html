@@ -271,6 +271,52 @@
       letter-spacing: 0.08em;
     }
 
+    details.feature-group {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fbf7ef;
+      overflow: hidden;
+    }
+
+    details.feature-group summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    details.feature-group[open] summary {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .feature-body {
+      padding: 0 16px 16px;
+    }
+
+    .feature-table code {
+      white-space: nowrap;
+      color: #075985;
+    }
+
+    .example {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .teaching-card {
+      margin-top: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fbf7ef;
+    }
+
+    .teaching-card h3 {
+      margin-top: 0;
+      color: var(--accent);
+    }
+
     .callout {
       border-left: 4px solid var(--accent-2);
       background: #fff5e8;
@@ -325,6 +371,7 @@
         <h2>Contents</h2>
         <a href="#purpose">Purpose</a>
         <a href="#inputs">Input Data</a>
+        <a href="#single-file">Single-File Mode</a>
         <a href="#pipeline">Processing Pipeline</a>
         <a href="#correlation">Cross-Log Correlation</a>
         <a href="#features">Feature Engineering</a>
@@ -395,6 +442,98 @@
             It reflects Zeek runtime configuration rather than network behavior, and it adds noise to
             summaries and plots without helping malicious-traffic detection.
           </div>
+        </section>
+
+        <section id="single-file">
+          <h2>Single-File Mode: What <code>-f</code> Does and Does Not Use</h2>
+          <p class="lede">
+            <code>-f</code> analyzes exactly one Zeek log. The columns printed in the anomaly table are kept
+            to help the analyst understand each row; they are not necessarily model inputs.
+          </p>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>What still happens</h3>
+              <ul class="bullet-list">
+                <li>The file is loaded and its log type is inferred from the filename stem.</li>
+                <li>The matching feature builder and scorer run on all rows in that file.</li>
+                <li>Rows receive <code>score</code> and <code>pred</code>, and the top <code>-a</code> selected rows are printed.</li>
+                <li>Original Zeek columns remain visible so a human can investigate the result.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>What is unavailable</h3>
+              <ul class="bullet-list">
+                <li>No other Zeek logs are loaded, so there is no cross-log <code>uid</code> or <code>fuid</code> evidence.</li>
+                <li>No directory maliciousness score or source-level scan behavior score is produced.</li>
+                <li>No normal-directory baseline comparison is performed; <code>-N</code> is a directory-mode feature.</li>
+                <li><code>--summary-line</code> is also a directory-mode feature.</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>Special case: <code>-f conn.log</code></h3>
+          <p>
+            This invokes <code>score_conn_pca</code>. PCA receives only the following eight numeric columns.
+            Everything else may be printed, and some auxiliary values may be computed, but it does not enter
+            the PCA matrix.
+          </p>
+          <div class="table-wrap">
+            <table class="feature-table">
+              <thead><tr><th>Used by PCA</th><th>Not used by PCA</th><th>Why the unused values are still shown</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>duration</code><br>
+                    <code>orig_bytes</code><br>
+                    <code>id.resp_p</code><br>
+                    <code>resp_bytes</code><br>
+                    <code>orig_ip_bytes</code><br>
+                    <code>resp_pkts</code><br>
+                    <code>resp_ip_bytes</code><br>
+                    <code>ip_proto</code>
+                  </td>
+                  <td>
+                    <code>ts</code>, <code>uid</code><br>
+                    <code>id.orig_h</code>, <code>id.resp_h</code><br>
+                    <code>id.orig_p</code><br>
+                    <code>proto</code>, <code>service</code><br>
+                    <code>conn_state</code>, <code>history</code><br>
+                    <code>local_orig</code>, <code>local_resp</code><br>
+                    <code>missed_bytes</code>, <code>orig_pkts</code><br>
+                    <code>tunnel_parents</code>
+                  </td>
+                  <td>
+                    Addresses identify the endpoints; textual protocol and service explain the traffic;
+                    connection state and history show what happened; and <code>uid</code> supports manual lookup.
+                    They explain an anomaly but do not cause its PCA score.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout">
+            <strong>Protocol detail:</strong> textual <code>proto</code> such as <code>tcp</code> or
+            <code>udp</code> is not a PCA input. Numeric <code>ip_proto</code> is used instead—for example,
+            <code>6</code> for TCP, <code>17</code> for UDP, and <code>58</code> for IPv6 ICMP. Likewise,
+            <code>service=ssl</code> is displayed but does not directly increase the PCA score.
+          </div>
+
+          <div class="callout danger">
+            <strong>How to read the example output:</strong> a row can rank highly because its duration,
+            byte counts, responder packets, port, or numeric IP protocol form an unusual combination. It did
+            not rank highly merely because the destination IP is rare or because Zeek labeled the service
+            <code>ssl</code>. Also remember that <code>-a 10</code> prints ten results but does not change PyOD
+            PCA's default 10% outlier threshold.
+          </div>
+
+          <p>
+            For other single files, the corresponding scorer still applies: <code>-f dns.log</code> uses the
+            DNS hybrid, <code>-f http.log</code> uses Isolation Forest, and so on. However, any feature that
+            requires a missing companion log becomes zero or is absent. For example, HTTP cannot inherit linked
+            file metadata when <code>files.log</code> was not loaded.
+          </p>
         </section>
 
         <section id="pipeline">
@@ -530,134 +669,447 @@
         <section id="features">
           <h2>Feature Engineering</h2>
           <p class="lede">
-            Features are engineered to match the semantics of each Zeek log. Some logs are true flows.
-            Some are sparse metadata. Some are telemetry. Some are already alert-like.
+            A feature is simply a number that represents one useful property of a log row. The detector
+            turns text, lists, flags, and related records into numbers because the scoring methods operate
+            on numeric tables. Open any log family below to see exactly what is computed and a small example.
           </p>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Log</th>
-                  <th>Main engineered features</th>
-                  <th>Why those features matter</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>conn.log</code></td>
-                  <td>originator/responder bytes, IP bytes, responder packets, duration, destination port, IP protocol</td>
-                  <td>Preserves the original PCA ranking of high-volume, long-duration, and otherwise exceptional flows</td>
-                </tr>
-                <tr>
-                  <td><code>http.log</code></td>
-                  <td>URI length, query depth, status rarity, request and response sizes, method rarity, linked file counts and bytes via <code>fuid</code>, related <code>uid</code> context</td>
-                  <td>Captures unusual web transactions, downloads, and HTTP-file relationships</td>
-                </tr>
-                <tr>
-                  <td><code>dns.log</code></td>
-                  <td>query length, entropy, digit ratio, vowel ratio, unique-character ratio, DGA-like flags, repeated DGA-like source behavior, response absence, rejection indicators</td>
-                  <td>Separates suspicious lexical DNS behavior from common local-discovery noise</td>
-                </tr>
-                <tr>
-                  <td><code>files.log</code></td>
-                  <td>total bytes, seen bytes, duration, MIME rarity, source flags, related HTTP and connection context</td>
-                  <td>Captures odd transferred files, unusual MIME types, and download context</td>
-                </tr>
-                <tr>
-                  <td><code>ssh.log</code></td>
-                  <td>banner rarity, auth attempts, related connection context, weird-event context</td>
-                  <td>Captures sparse but useful metadata for SSH probing and odd negotiation behavior</td>
-                </tr>
-                <tr>
-                  <td><code>tls.log</code> / <code>ssl.log</code></td>
-                  <td>cipher and version metadata, SNI-related rarity, basic session metadata, connection context</td>
-                  <td>Captures unusual TLS sessions and strange service combinations</td>
-                </tr>
-                <tr>
-                  <td><code>weird.log</code> / <code>notice.log</code></td>
-                  <td>event-name rarity, notice linkage, related transaction context</td>
-                  <td>These logs already describe exceptional states, so rarity and prioritization matter most</td>
-                </tr>
-                <tr>
-                  <td><code>stats.log</code></td>
-                  <td>bytes per packet, events per packet, queue pressure, TCP/UDP/ICMP shares, file and DNS pressure, reassembly pressure, memory and queue deltas</td>
-                  <td>Turns raw telemetry into operational pressure features instead of naive raw-counter outliers</td>
-                </tr>
-                <tr>
-                  <td>inventory logs</td>
-                  <td>host, service, software, ARP, packet-filter rarity and drift-style indicators</td>
-                  <td>These logs are more useful for novelty and drift than for direct flow outliers</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="callout">
+            <strong>Four naming rules make the tables easier to read.</strong>
+            A <code>*_count</code> feature counts items; <code>*_len</code> counts characters;
+            <code>is_*</code> and other Boolean features are <code>1</code> for yes and <code>0</code> for no;
+            and <code>*_rarity</code> is <code>-ln(frequency)</code>. For example, a value seen in 50 of
+            100 rows has rarity <code>0.69</code>, while a value seen once has rarity <code>4.61</code>.
+            Missing numeric values such as Zeek's <code>-</code> are converted to zero.
           </div>
+
+          <details class="feature-group">
+            <summary>Shared <code>uid</code> and <code>fuid</code> context computed before per-log features</summary>
+            <div class="feature-body">
+              <p>
+                These values are computed once from the whole directory. A log-specific builder then copies
+                only the context fields it requests onto each row sharing that identifier.
+              </p>
+              <div class="table-wrap"><table class="feature-table">
+                <thead><tr><th>Context value</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                <tbody>
+                  <tr><td><code>&lt;log&gt;_count</code>, <code>uid_log_types</code></td><td>Rows per log type sharing a UID—such as <code>conn_count</code>, <code>dns_count</code>, <code>http_count</code>, <code>files_count</code>, <code>ssh_count</code>, <code>tls_count</code>, <code>weird_count</code>, or any other loaded log—and number of different log types containing it.</td><td class="example">One conn, two HTTP, and one file row gives <code>http_count=2</code> and log types <code>3</code>.</td></tr>
+                  <tr><td><code>uid_conn_bytes</code>, <code>uid_conn_pkts</code>, <code>uid_conn_duration</code></td><td>Maximum total flow bytes, packets, and duration for the UID.</td><td class="example">A 2 MB, 500-packet, 10-second flow provides those three values.</td></tr>
+                  <tr><td><code>uid_resp_port</code>, <code>uid_conn_state_rarity</code></td><td>Maximum responder port and maximum connection-state rarity associated with the UID.</td><td class="example">A UID on port 443 with a state rarity of 3.2 stores <code>443</code> and <code>3.2</code>.</td></tr>
+                  <tr><td><code>uid_weird_count</code>, <code>uid_weird_notice_count</code>, <code>uid_weird_name_rarity</code></td><td>Number of weird rows, number promoted to notices, and summed event-name rarity.</td><td class="example">Two weird events, one noticed, with rarities 2 and 3 gives <code>2</code>, <code>1</code>, <code>5</code>.</td></tr>
+                  <tr><td><code>uid_http_count</code>, <code>uid_http_body_sum</code>, <code>uid_http_status_rarity</code></td><td>HTTP row count, summed request/response body bytes, and summed status-code rarity.</td><td class="example">Two rows carrying 10 KB total give count <code>2</code> and body sum <code>10000</code>.</td></tr>
+                  <tr><td><code>uid_files_count</code>, <code>uid_file_total_bytes</code>, <code>uid_file_mime_rarity</code></td><td>File row count, summed file bytes, and summed MIME rarity.</td><td class="example">Two 5 KB files with rarity 1.5 each gives <code>2</code>, <code>10000</code>, <code>3</code>.</td></tr>
+                  <tr><td><code>uid_ssh_count</code>, <code>uid_ssh_auth_attempts</code></td><td>SSH row count and summed authentication attempts.</td><td class="example">Two SSH rows with three attempts each gives <code>2</code>, <code>6</code>.</td></tr>
+                  <tr><td><code>file_total_bytes</code>, <code>file_mime_rarity</code>, <code>file_source_rarity</code> by <code>fuid</code></td><td>Lookup values stored for each file ID so HTTP rows can inherit file information.</td><td class="example">FUID <code>F1</code> can map to 50 KB, MIME rarity 4.0, and source rarity 0.7.</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </details>
+
+          <details class="feature-group" open>
+            <summary><code>conn.log</code>: flow features and the eight PCA inputs</summary>
+            <div class="feature-body">
+              <p>
+                The builder computes many descriptive values, but the current per-flow PCA deliberately uses
+                only the original eight inputs in the first table. Constant inputs are removed for that file.
+                Scan aggregates are evaluated separately in the directory behavior score.
+              </p>
+              <div class="table-wrap">
+                <table class="feature-table">
+                  <thead><tr><th>PCA input</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>duration</code></td><td>Seconds between the start and end of the connection.</td><td class="example">A flow lasting 2.5 seconds gives <code>2.5</code>.</td></tr>
+                    <tr><td><code>orig_bytes</code></td><td>Application payload bytes sent by the originator.</td><td class="example">The client sends 1,200 payload bytes: <code>1200</code>.</td></tr>
+                    <tr><td><code>id.resp_p</code></td><td>Responder or destination port.</td><td class="example">HTTPS normally gives <code>443</code>.</td></tr>
+                    <tr><td><code>resp_bytes</code></td><td>Application payload bytes returned by the responder.</td><td class="example">A 2 MB reply gives about <code>2000000</code>.</td></tr>
+                    <tr><td><code>orig_ip_bytes</code></td><td>Originator bytes including IP and transport headers.</td><td class="example">1,200 payload bytes plus headers might give <code>1380</code>.</td></tr>
+                    <tr><td><code>resp_pkts</code></td><td>Packets sent by the responder.</td><td class="example">A response split across 42 packets gives <code>42</code>.</td></tr>
+                    <tr><td><code>resp_ip_bytes</code></td><td>Responder bytes including IP and transport headers.</td><td class="example">A 2 MB payload plus headers might give <code>2050000</code>.</td></tr>
+                    <tr><td><code>ip_proto</code></td><td>IP protocol number.</td><td class="example"><code>6</code> is TCP, <code>17</code> is UDP, and <code>58</code> is IPv6 ICMP.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h3>Additional connection features computed by the builder</h3>
+              <div class="table-wrap">
+                <table class="feature-table">
+                  <thead><tr><th>Feature</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>total_bytes</code>, <code>total_pkts</code></td><td>Traffic in both directions added together.</td><td class="example">1,200 + 800 bytes gives <code>2000</code>.</td></tr>
+                    <tr><td><code>orig_resp_bytes_ratio</code>, <code>orig_resp_pkts_ratio</code></td><td>How one-sided the connection is. The code adds 1 before dividing to avoid division by zero.</td><td class="example">1,000 origin bytes and 99 response bytes gives <code>(1000+1)/(99+1)=10.01</code>.</td></tr>
+                    <tr><td><code>bytes_per_second</code></td><td>Total bytes divided by duration.</td><td class="example">10,000 bytes over 2 seconds gives about <code>5000</code>.</td></tr>
+                    <tr><td><code>bytes_per_packet</code></td><td>Total bytes divided by total packets plus 1.</td><td class="example">10,000 bytes and 99 packets gives <code>100</code>.</td></tr>
+                    <tr><td><code>resp_port_rarity</code>, <code>service_rarity</code>, <code>state_rarity</code>, <code>history_rarity</code></td><td>How uncommon the destination port, Zeek service, connection state, or packet-history string is in this log.</td><td class="example">If <code>REJ</code> appears once in 100 rows, its state rarity is <code>4.61</code>.</td></tr>
+                    <tr><td><code>dst_host_popularity</code></td><td>Absolute z-score of the destination's occurrence count: how far its popularity is from the average destination popularity.</td><td class="example">A host contacted 500 times when most are contacted twice gets a large value.</td></tr>
+                    <tr><td><code>is_failed_scan_state</code></td><td>1 for states commonly seen in failed probes, such as <code>S0</code> or <code>REJ</code>.</td><td class="example"><code>conn_state=REJ</code> gives <code>1</code>.</td></tr>
+                    <tr><td><code>is_scan_history</code></td><td>1 for short Zeek history patterns associated with incomplete probes.</td><td class="example"><code>history=S</code> gives <code>1</code>.</td></tr>
+                    <tr><td><code>is_short_conn</code></td><td>1 when duration is at most 0.05 seconds.</td><td class="example">0.02 seconds gives <code>1</code>.</td></tr>
+                    <tr><td><code>is_zero_payload</code></td><td>1 when originator and responder payload bytes sum to zero.</td><td class="example">A SYN without payload gives <code>1</code>.</td></tr>
+                    <tr><td><code>is_service_missing</code></td><td>1 when Zeek did not identify an application service.</td><td class="example"><code>service=-</code> gives <code>1</code>.</td></tr>
+                    <tr><td><code>is_established_session</code></td><td>1 for established states <code>SF</code> or <code>S1</code>.</td><td class="example"><code>conn_state=SF</code> gives <code>1</code>.</td></tr>
+                    <tr><td><code>src_flow_count</code></td><td>Total connections created by this source address.</td><td class="example">A source present in 300 rows gets <code>300</code>.</td></tr>
+                    <tr><td><code>src_unique_resp_hosts</code>, <code>src_unique_resp_ports</code></td><td>Distinct destination hosts and ports contacted by the source.</td><td class="example">Ten hosts across ports 22, 80, and 443 gives <code>10</code> and <code>3</code>.</td></tr>
+                    <tr><td><code>src_failed_state_fraction</code>, <code>src_short_fraction</code>, <code>src_zero_payload_fraction</code>, <code>src_missing_service_fraction</code></td><td>Fractions of that source's flows matching each Boolean condition.</td><td class="example">80 failed flows among 100 gives <code>0.8</code>.</td></tr>
+                    <tr><td><code>src_max_dst_port_sweep</code></td><td>Largest number of different ports that the source tried on any one destination.</td><td class="example">Ports 1–100 on one host gives <code>100</code>.</td></tr>
+                    <tr><td><code>src_mean_dst_port_sweep</code></td><td>Average distinct-port count across destinations contacted by the source.</td><td class="example">Sweeps of 10 and 30 ports average to <code>20</code>.</td></tr>
+                    <tr><td><code>src_max_dst_failed_fraction</code></td><td>Highest failed-connection fraction for any one source/destination pair.</td><td class="example">Nine failures in ten attempts gives <code>0.9</code>.</td></tr>
+                    <tr><td><code>uid_log_types</code>, <code>uid_http_count</code>, <code>uid_files_count</code>, <code>uid_ssh_count</code>, <code>uid_weird_count</code></td><td>How many log types or related rows share this connection's <code>uid</code>.</td><td class="example">A UID found in conn, HTTP, and files gets <code>uid_log_types=3</code>.</td></tr>
+                    <tr><td><code>uid_file_total_bytes</code>, <code>uid_weird_name_rarity</code></td><td>Total related file bytes and summed rarity of related weird-event names.</td><td class="example">Two linked 5 KB files give <code>10000</code> bytes.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="example">
+                Important: the additional values above are currently built for context and diagnostics, but
+                <code>score_conn_pca</code> selects only the eight PCA inputs. The directory scan profile computes
+                equivalent source-level behavior independently.
+              </p>
+            </div>
+          </details>
+
+          <details class="feature-group">
+            <summary><code>http.log</code>: web transaction features</summary>
+            <div class="feature-body">
+              <div class="table-wrap"><table class="feature-table">
+                <thead><tr><th>Feature</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id.resp_p</code>, <code>trans_depth</code>, <code>status_code</code></td><td>Destination port, HTTP transaction position within the connection, and numeric response status.</td><td class="example">The second request returning Not Found gives depth <code>2</code>, status <code>404</code>.</td></tr>
+                  <tr><td><code>request_body_len</code>, <code>response_body_len</code></td><td>Bytes in the request and response bodies.</td><td class="example">A small POST and 20 KB reply gives <code>200</code> and <code>20000</code>.</td></tr>
+                  <tr><td><code>uri_len</code>, <code>host_len</code>, <code>user_agent_len</code></td><td>Character counts of the URI, Host header, and User-Agent.</td><td class="example"><code>/login</code> has URI length <code>6</code>.</td></tr>
+                  <tr><td><code>method_rarity</code>, <code>status_rarity</code>, <code>host_rarity</code>, <code>uri_rarity</code>, <code>user_agent_rarity</code></td><td>How uncommon each exact HTTP value is in this log.</td><td class="example">One <code>TRACE</code> among 1,000 methods has rarity <code>6.91</code>.</td></tr>
+                  <tr><td><code>resp_fuid_count</code>, <code>orig_fuid_count</code></td><td>Number of responder-side and originator-side file IDs recorded in the row.</td><td class="example">Two downloaded objects gives responder count <code>2</code>.</td></tr>
+                  <tr><td><code>linked_file_count</code></td><td>Responder file IDs that were actually found in <code>files.log</code>.</td><td class="example">Three IDs, two found in files.log: <code>2</code>.</td></tr>
+                  <tr><td><code>linked_file_bytes</code></td><td>Total size of those linked files.</td><td class="example">5 KB + 20 KB gives <code>25000</code>.</td></tr>
+                  <tr><td><code>linked_file_mime_rarity</code></td><td>Sum of MIME-type rarity for linked files.</td><td class="example">A rare executable MIME with rarity 5.2 contributes <code>5.2</code>.</td></tr>
+                  <tr><td><code>uid_conn_bytes</code>, <code>uid_conn_duration</code></td><td>Bytes and duration of the related connection.</td><td class="example">An HTTP row linked to a 3 MB, 20-second flow gets those values.</td></tr>
+                  <tr><td><code>uid_weird_count</code>, <code>uid_weird_name_rarity</code></td><td>Number and total name rarity of linked weird events.</td><td class="example">Two unusual parser events gives count <code>2</code>.</td></tr>
+                  <tr><td><code>uid_files_count</code>, <code>uid_file_total_bytes</code></td><td>Number and total bytes of all file rows sharing the UID.</td><td class="example">Three 10 KB files gives <code>3</code> and <code>30000</code>.</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </details>
+
+          <details class="feature-group">
+            <summary><code>files.log</code>: transferred-file features</summary>
+            <div class="feature-body">
+              <div class="table-wrap"><table class="feature-table">
+                <thead><tr><th>Feature</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id.resp_p</code>, <code>depth</code>, <code>duration</code></td><td>Destination port, file-analysis nesting depth, and transfer duration.</td><td class="example">An HTTP file on port 80 at depth 0 lasting 1.2 seconds.</td></tr>
+                  <tr><td><code>seen_bytes</code>, <code>total_bytes</code></td><td>Bytes Zeek observed versus expected total file size.</td><td class="example">Zeek sees 8 KB of a 10 KB file: <code>8000</code>, <code>10000</code>.</td></tr>
+                  <tr><td><code>missing_bytes</code>, <code>overflow_bytes</code></td><td>Known gaps and bytes beyond the expected file size.</td><td class="example">A 2 KB capture gap gives <code>missing_bytes=2000</code>.</td></tr>
+                  <tr><td><code>local_orig</code>, <code>is_orig</code>, <code>timedout</code></td><td>0/1 flags for a local originator, originator-direction file, and analysis timeout.</td><td class="example">A timed-out download gives <code>timedout=1</code>.</td></tr>
+                  <tr><td><code>mime_rarity</code>, <code>source_rarity</code></td><td>Rarity of MIME type and analyzer source such as HTTP or SMTP.</td><td class="example">One executable among 100 files gets MIME rarity <code>4.61</code>.</td></tr>
+                  <tr><td><code>analyzer_count</code></td><td>Number of analyzers attached to the file.</td><td class="example">MD5 and SHA1 analyzers give <code>2</code>.</td></tr>
+                  <tr><td><code>bytes_gap</code></td><td>Absolute difference between total and seen bytes.</td><td class="example"><code>|10000-8000|=2000</code>.</td></tr>
+                  <tr><td><code>uid_http_count</code>, <code>uid_http_body_sum</code>, <code>uid_http_status_rarity</code></td><td>Count, combined body bytes, and summed status rarity of linked HTTP rows.</td><td class="example">One 50 KB HTTP 404 response carries count <code>1</code> and body sum near <code>50000</code>.</td></tr>
+                  <tr><td><code>uid_weird_count</code>, <code>uid_conn_bytes</code></td><td>Linked weird-event count and total connection bytes.</td><td class="example">A file on a 2 MB flow with one weird event gives <code>2000000</code> and <code>1</code>.</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </details>
+
+          <details class="feature-group">
+            <summary><code>ssh.log</code> and <code>tls.log</code>: encrypted-session metadata</summary>
+            <div class="feature-body">
+              <div class="table-wrap"><table class="feature-table">
+                <thead><tr><th>Log and feature</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                <tbody>
+                  <tr><td>SSH: <code>id.resp_p</code>, <code>auth_attempts</code></td><td>Server port and authentication attempts.</td><td class="example">Five login attempts to port 22 gives <code>22</code>, <code>5</code>.</td></tr>
+                  <tr><td>SSH: <code>client_len</code>, <code>server_len</code></td><td>Character lengths of client and server software banners.</td><td class="example"><code>SSH-2.0-OpenSSH_9.0</code> has length <code>19</code>.</td></tr>
+                  <tr><td>SSH: <code>client_rarity</code>, <code>server_rarity</code></td><td>How uncommon the exact client and server banners are.</td><td class="example">A banner seen once in 100 rows gets <code>4.61</code>.</td></tr>
+                  <tr><td>TLS: <code>id.resp_p</code>, <code>version_num</code></td><td>Server port and numeric TLS version when the field can be converted.</td><td class="example">A TLS session to port <code>443</code>.</td></tr>
+                  <tr><td>TLS: <code>cipher_count</code></td><td>Number of values in the cipher field; a scalar value counts as one.</td><td class="example">One negotiated cipher gives <code>1</code>.</td></tr>
+                  <tr><td>TLS: <code>server_name_len</code></td><td>Length of the SNI server name.</td><td class="example"><code>example.com</code> gives <code>11</code>.</td></tr>
+                  <tr><td>TLS: <code>ja3_rarity</code>, <code>ja3s_rarity</code>, <code>sni_rarity</code></td><td>Rarity of client fingerprint, server fingerprint, and requested server name.</td><td class="example">A JA3 seen twice in 1,000 rows has rarity <code>6.21</code>.</td></tr>
+                  <tr><td>SSH/TLS: <code>uid_conn_bytes</code>, <code>uid_conn_duration</code>, <code>uid_weird_count</code>, <code>uid_weird_name_rarity</code></td><td>Related flow size/duration and weird-event context. TLS uses the first three; SSH uses all four.</td><td class="example">A rare banner on a very large flow is represented by both kinds of feature.</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </details>
+
+          <details class="feature-group" open>
+            <summary><code>dns.log</code>: query-shape, DGA, response, and benign-discovery features</summary>
+            <div class="feature-body">
+              <p>
+                DNS lexical features use the first label. For <code>x7k9ab.example.com</code>, the first label
+                is <code>x7k9ab</code> and the top-level domain is <code>com</code>.
+              </p>
+              <div class="table-wrap"><table class="feature-table">
+                <thead><tr><th>Feature</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id.resp_p</code></td><td>Destination port used for DNS.</td><td class="example">Ordinary DNS uses <code>53</code>; mDNS uses <code>5353</code>.</td></tr>
+                  <tr><td><code>query_len</code>, <code>label_count</code>, <code>first_label_len</code></td><td>Full query characters, dot-separated part count, and first-label characters.</td><td class="example"><code>abc.example.com</code> gives <code>15</code>, <code>3</code>, and <code>3</code>.</td></tr>
+                  <tr><td><code>query_entropy</code></td><td>Shannon entropy of characters in the first label; mixed unpredictable characters produce a higher value.</td><td class="example"><code>aaaaaaaa</code> has entropy <code>0</code>; <code>a7k2m9qx</code> is near <code>3</code>.</td></tr>
+                  <tr><td><code>unique_char_ratio</code></td><td>Distinct characters divided by first-label length.</td><td class="example"><code>abca</code> has 3 distinct characters over 4: <code>0.75</code>.</td></tr>
+                  <tr><td><code>vowel_ratio</code>, <code>consonant_ratio</code></td><td>Vowels or consonants divided by alphabetic characters.</td><td class="example"><code>test</code> has 1 vowel and 3 consonants: <code>0.25</code>, <code>0.75</code>.</td></tr>
+                  <tr><td><code>digit_ratio</code></td><td>Digits divided by first-label length.</td><td class="example"><code>abc123</code> gives <code>3/6=0.5</code>.</td></tr>
+                  <tr><td><code>query_rarity</code>, <code>tld_rarity</code>, <code>qtype_rarity</code>, <code>rcode_rarity</code></td><td>Rarity of the full name, TLD, query type, and response code.</td><td class="example">One <code>TXT</code> query among 100 gives qtype rarity <code>4.61</code>.</td></tr>
+                  <tr><td><code>answer_count</code>, <code>ttl_count</code></td><td>Number of answers and TTL values.</td><td class="example">Two A records with two TTLs gives <code>2</code>, <code>2</code>.</td></tr>
+                  <tr><td><code>no_answer</code>, <code>rejected</code>, <code>noerror_noanswer</code></td><td>0/1 flags for no answers, Zeek rejection, and a successful response code that still contains no answer.</td><td class="example"><code>NOERROR</code> with an empty answer list sets the first and third flags to <code>1</code>.</td></tr>
+                  <tr><td><code>dga_like</code></td><td>1 when the first label is at least 8 characters, entropy is at least 2.8, unique-character ratio is at least 0.55, and it has few vowels or enough digits.</td><td class="example"><code>x7k2m9qz12</code> may satisfy all tests and give <code>1</code>.</td></tr>
+                  <tr><td><code>dga_pattern_count</code></td><td>Rows sharing the same source, TLD, coarse length bucket, entropy bucket, and DGA flag.</td><td class="example">A host makes 40 similarly shaped random-looking <code>.com</code> queries: <code>40</code>.</td></tr>
+                  <tr><td><code>src_dga_like_count</code></td><td>Total DGA-like queries made by the source.</td><td class="example">Seven flagged queries from one source gives <code>7</code> on each of its rows.</td></tr>
+                  <tr><td><code>is_local_tld</code></td><td>1 when the name ends in <code>.local</code>.</td><td class="example"><code>printer.local</code> gives <code>1</code>.</td></tr>
+                  <tr><td><code>is_reverse_lookup</code></td><td>1 for <code>in-addr.arpa</code> or <code>ip6.arpa</code> reverse lookups.</td><td class="example"><code>1.0.0.127.in-addr.arpa</code> gives <code>1</code>.</td></tr>
+                  <tr><td><code>is_service_discovery</code></td><td>1 for underscore-prefixed or local TCP/UDP service-discovery names.</td><td class="example"><code>_ipp._tcp.local</code> gives <code>1</code>.</td></tr>
+                  <tr><td><code>is_mdns</code></td><td>1 when destination port is 5353 or the name ends in <code>.local</code>.</td><td class="example">A query to UDP 5353 gives <code>1</code>.</td></tr>
+                  <tr><td><code>uid_conn_bytes</code>, <code>uid_conn_duration</code>, <code>uid_weird_count</code>, <code>uid_weird_name_rarity</code></td><td>Size/duration of the related flow and linked weird-event context.</td><td class="example">A query sharing a UID with two rare weird events carries their count and rarity.</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </details>
+
+          <details class="feature-group">
+            <summary><code>weird.log</code>, <code>notice.log</code>, and inventory/event logs</summary>
+            <div class="feature-body">
+              <div class="table-wrap"><table class="feature-table">
+                <thead><tr><th>Log and feature</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                <tbody>
+                  <tr><td>weird: <code>id.resp_p</code>, <code>notice</code></td><td>Destination port and whether the weird event was promoted to a notice.</td><td class="example">A noticed event on port 443 gives <code>443</code>, <code>1</code>.</td></tr>
+                  <tr><td>weird: <code>name_rarity</code>, <code>source_rarity</code>, <code>peer_rarity</code></td><td>Rarity of weird-event name, analyzer source, and Zeek peer.</td><td class="example">A name seen once in 100 rows gets <code>4.61</code>.</td></tr>
+                  <tr><td>weird UID context</td><td><code>uid_conn_bytes</code>, <code>uid_conn_duration</code>, <code>uid_http_count</code>, <code>uid_files_count</code>, and <code>uid_ssh_count</code>.</td><td class="example">A weird event linked to HTTP and a file gets both counts.</td></tr>
+                  <tr><td>notice: <code>n</code>, <code>suppress_for</code></td><td>Numeric notice count/value and suppression interval.</td><td class="example">Suppress repeats for one hour: <code>3600</code>.</td></tr>
+                  <tr><td>notice: <code>note_rarity</code>, <code>src_rarity</code>, <code>msg_len</code></td><td>Rarity of notice type and source, plus message character count.</td><td class="example">A 120-character message gives <code>msg_len=120</code>.</td></tr>
+                  <tr><td>known_services: <code>port_num</code>, <code>service_rarity</code>, <code>host_rarity</code>, <code>proto_rarity</code></td><td>Observed port and rarity of service, host, and transport protocol.</td><td class="example">A service seen once in 50 rows gets rarity <code>3.91</code>.</td></tr>
+                  <tr><td>known_hosts: <code>host_rarity</code>, <code>time_gap_z</code>, <code>ts</code></td><td>Host rarity, unusualness of time since the previous row, and raw timestamp.</td><td class="example">A 1-hour gap among usual 1-second gaps gets a large <code>time_gap_z</code>.</td></tr>
+                  <tr><td>software: <code>host_p</code>, <code>version.major</code>, <code>version.minor</code></td><td>Host port and numeric major/minor version.</td><td class="example">Version 9.3 gives major <code>9</code>, minor <code>3</code>.</td></tr>
+                  <tr><td>software: <code>software_type_rarity</code>, <code>name_rarity</code>, <code>version_addl_rarity</code>, <code>unparsed_version_len</code></td><td>Rarity of software category, name, extra version text, and length of unparsed version text.</td><td class="example">One unusual product in 100 rows gives name rarity <code>4.61</code>.</td></tr>
+                  <tr><td>ARP: <code>operation_rarity</code>, <code>src_mac_rarity</code>, <code>dst_mac_rarity</code>, <code>orig_h_rarity</code>, <code>resp_h_rarity</code></td><td>Rarity of operation, MAC addresses, and IP addresses.</td><td class="example">A never-before-seen MAC gets a high rarity value.</td></tr>
+                  <tr><td>ARP: <code>broadcast_request</code></td><td>1 when destination MAC is <code>ff:ff:ff:ff:ff:ff</code>.</td><td class="example">A normal ARP who-has request gives <code>1</code>.</td></tr>
+                  <tr><td>packet_filter: <code>init</code>, <code>success</code>, <code>filter_rarity</code>, <code>node_rarity</code></td><td>Initialization/success flags and rarity of filter text and node.</td><td class="example">A failed rare filter update gives <code>success=0</code> and high filter rarity.</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </details>
+
+          <details class="feature-group">
+            <summary><code>stats.log</code> and <code>capture_loss.log</code>: telemetry features</summary>
+            <div class="feature-body">
+              <div class="table-wrap"><table class="feature-table">
+                <thead><tr><th>Feature</th><th>Plain meaning</th><th>Small example</th></tr></thead>
+                <tbody>
+                  <tr><td><code>mem</code>, <code>events_queued</code>, <code>active_files</code>, <code>active_dns_requests</code></td><td>Raw memory, queued-event, active-file, and active-DNS workload levels.</td><td class="example">A queue currently holding 500 events gives <code>500</code>.</td></tr>
+                  <tr><td><code>active_conns</code></td><td>Active TCP + UDP + ICMP connections.</td><td class="example">80 + 15 + 5 gives <code>100</code>.</td></tr>
+                  <tr><td><code>total_reassembly</code></td><td>TCP + file + fragment + unknown reassembly bytes.</td><td class="example">Four 1 KB components give <code>4096</code>.</td></tr>
+                  <tr><td><code>bytes_per_packet</code>, <code>events_per_packet</code></td><td>Received bytes or processed events divided by processed packets.</td><td class="example">100,000 bytes / 1,000 packets gives <code>100</code>.</td></tr>
+                  <tr><td><code>queued_to_processed_ratio</code></td><td>Queued events divided by processed events plus 1.</td><td class="example">100 queued / (999 processed + 1) gives <code>0.1</code>.</td></tr>
+                  <tr><td><code>active_to_total_conn_ratio</code></td><td>Active connections divided by all connections plus 1.</td><td class="example">100 active / (999 total + 1) gives <code>0.1</code>.</td></tr>
+                  <tr><td><code>tcp_share</code>, <code>udp_share</code>, <code>icmp_share</code></td><td>Each protocol's share of all connections.</td><td class="example">80 TCP of 100 connections gives TCP share near <code>0.8</code>.</td></tr>
+                  <tr><td><code>files_per_conn</code>, <code>active_files_per_conn</code></td><td>Total files per TCP connection and active files per active connection.</td><td class="example">50 files / 100 TCP connections gives about <code>0.5</code>.</td></tr>
+                  <tr><td><code>dns_per_udp_conn</code>, <code>active_dns_pressure</code></td><td>DNS requests per UDP connection and active DNS requests relative to all DNS requests.</td><td class="example">200 DNS requests / 20 UDP connections gives about <code>10</code>.</td></tr>
+                  <tr><td><code>reassembly_per_tcp_conn</code>, <code>timer_pressure</code>, <code>mem_per_packet</code></td><td>Reassembly bytes per TCP connection, active timers per timer, and memory per processed packet.</td><td class="example">1 MB reassembly / 100 TCP connections gives about <code>10000</code>.</td></tr>
+                  <tr><td><code>ts_delta</code></td><td>Seconds since the previous stats row.</td><td class="example">Samples at 10s and 15s give <code>5</code>.</td></tr>
+                  <tr><td><code>pkts_rate</code>, <code>bytes_rate</code>, <code>events_rate</code></td><td>Increase in cumulative packets, bytes, or events divided by elapsed seconds.</td><td class="example">500 new packets over 5 seconds gives <code>100/s</code>.</td></tr>
+                  <tr><td><code>queue_growth_rate</code>, <code>conn_growth_rate</code>, <code>file_growth_rate</code>, <code>dns_growth_rate</code></td><td>Per-second change in queue, total connections, files, or DNS requests.</td><td class="example">50 new DNS requests over 5 seconds gives <code>10/s</code>.</td></tr>
+                  <tr><td><code>mem_delta</code>, <code>queue_delta</code></td><td>Absolute change in memory and queued events since the previous row.</td><td class="example">Queue moves from 10 to 510: delta <code>500</code>.</td></tr>
+                  <tr><td><code>conn_mix_delta</code></td><td>Sum of absolute changes in TCP, UDP, and ICMP shares.</td><td class="example">A sudden shift from mostly TCP to mostly UDP produces a large value.</td></tr>
+                  <tr><td>capture loss: <code>ts_delta</code>, <code>gaps</code>, <code>acks</code>, <code>percent_lost</code></td><td>Available raw interval, sequence-gap, acknowledgment, and loss-percentage fields.</td><td class="example">2 packets lost out of 100 might report <code>percent_lost=2</code>.</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </details>
+
+          <details class="feature-group">
+            <summary>Unknown log types: generic feature builder</summary>
+            <div class="feature-body">
+              <p>
+                For an unrecognized Zeek log, <code>ts</code>, <code>uid</code>, and <code>fuid</code> are excluded.
+                Every remaining column that can be parsed numerically keeps its original name and becomes a
+                numeric feature; every text column becomes <code>&lt;column&gt;_rarity</code>.
+              </p>
+              <p class="example">
+                Example: numeric <code>attempts=7</code> remains <code>attempts=7</code>; text
+                <code>action=blocked</code> seen once among 100 rows becomes <code>action_rarity=4.61</code>.
+              </p>
+            </div>
+          </details>
         </section>
 
         <section id="models">
           <h2>Models and Scoring Techniques</h2>
           <p class="lede">
-            Different Zeek logs are scored differently because their statistical structure differs.
+            A score answers one question: “How unusual is this row compared with the other rows in the same
+            log?” It is not a probability of attack. Before scoring, every method removes columns that have
+            only one value because a constant column cannot distinguish one row from another.
           </p>
 
-          <div class="grid-2">
-            <div class="card">
-              <h3>Isolation Forest</h3>
-              <p>
-                Used where multivariate numeric behavior makes sense, especially for rich transaction logs.
-                It is appropriate when anomalies are unusual combinations of otherwise normal-looking fields.
-              </p>
-              <ul class="bullet-list">
-                <li>Primary use: <code>http.log</code>, <code>files.log</code>, and some TLS-style logs</li>
-                <li>Score meaning: more isolated rows get higher anomaly score</li>
-              </ul>
-            </div>
-            <div class="card">
-              <h3>Rarity scoring</h3>
-              <p>
-                Used for event-like or inventory-like logs where the strongest signal is not geometric distance
-                but uncommon values, combinations, or states.
-              </p>
-              <ul class="bullet-list">
-                <li>Primary use: <code>weird</code>, <code>notice</code>, <code>known_hosts</code>, <code>known_services</code>, <code>software</code>, <code>arp</code>, <code>packet_filter</code></li>
-                <li>Score meaning: rarer rows score higher</li>
-              </ul>
-            </div>
-            <div class="card">
-              <h3>Hybrid DNS scoring</h3>
-              <p>
-                DNS uses custom logic rather than a generic unsupervised model. It explicitly boosts DGA-like
-                lexical behavior, repeated suspicious query behavior per source, missing answers, and rejection
-                patterns, while downweighting benign local-discovery traffic.
-              </p>
-            </div>
-            <div class="card">
-              <h3>PCA connection scoring</h3>
-              <p>
-                <code>conn.log</code> uses the original detector's eight traffic fields and PyOD PCA.
-                Source-level scan behavior is evaluated separately in the directory behavior profile.
-              </p>
-            </div>
-            <div class="card">
-              <h3>Time-series deviation scoring</h3>
-              <p>
-                Telemetry logs such as <code>stats.log</code> and <code>capture_loss.log</code> use deviation
-                scoring over levels and changes because their rows are not independent flows.
-              </p>
-            </div>
-            <div class="card">
-              <h3>Fallback distance</h3>
-              <p>
-                When the feature space is too small or degenerate for the intended model, the tool falls back
-                to a stable distance-style score rather than failing outright.
-              </p>
+          <div class="teaching-card">
+            <h3>PCA: how <code>conn.log</code> anomalies are found</h3>
+            <p>
+              PCA means <strong>Principal Component Analysis</strong>. Imagine plotting every connection as a
+              point. With only two features, the horizontal axis might be duration and the vertical axis might
+              be response bytes. Real data has eight axes, but the idea is the same.
+            </p>
+            <ol class="bullet-list">
+              <li>
+                <strong>Build the table.</strong> Each row is one connection and the columns are duration,
+                originator bytes, responder port, responder bytes, originator IP bytes, responder packets,
+                responder IP bytes, and IP protocol.
+              </li>
+              <li>
+                <strong>Put features on comparable scales.</strong> PyOD standardizes every column to mean 0
+                and standard deviation 1. Without this step, a byte count in the millions would overwhelm a
+                protocol number such as 6.
+              </li>
+              <li>
+                <strong>Learn the normal directions.</strong> PCA finds new axes—called principal
+                components—that summarize how features vary together. For example, response bytes and response
+                packets normally increase together, so PCA learns that common direction.
+              </li>
+              <li>
+                <strong>Measure departure from those patterns.</strong> PyOD measures each standardized row's
+                distance to the learned component vectors. Contributions are divided by explained variance,
+                so components with smaller explained variance have more influence on the score.
+              </li>
+              <li>
+                <strong>Rank and label.</strong> Larger distance means a larger anomaly score. PyOD's default
+                contamination is 0.10, so roughly the highest-scoring 10% receive <code>pred=1</code>. The
+                <code>-a</code> option controls how many of those labeled rows are printed; it does not change
+                PCA's 10% threshold.
+              </li>
+            </ol>
+            <div class="callout">
+              <strong>Tiny example:</strong> suppose ordinary downloads have 100 response packets and about
+              100 KB, while large downloads have 1,000 packets and about 1 MB. Those two features grow together.
+              A flow with 1,000 packets but only 2 KB breaks that learned relationship and can score highly.
+              A flow with exceptionally large byte counts can also be far from the center and score highly even
+              when its ratios look ordinary. PCA says “unusual combination,” not “malicious.”
             </div>
           </div>
 
+          <div class="teaching-card">
+            <h3>Isolation Forest: isolate unusual transactions quickly</h3>
+            <p>
+              Used for <code>http.log</code>, <code>files.log</code>, <code>ssh.log</code>, and
+              <code>tls.log</code>. It does not try to draw one boundary around normal traffic. Instead, it asks
+              how quickly a row can be separated from all other rows.
+            </p>
+            <ol class="bullet-list">
+              <li>Choose a feature at random, such as response body length.</li>
+              <li>Choose a random split value, such as 40,000 bytes.</li>
+              <li>Repeat the random splits until rows are isolated in a tree.</li>
+              <li>Build 200 such trees and average the result.</li>
+            </ol>
+            <p>
+              A common row buried inside a dense cluster needs many splits. A strange row far from the others
+              is often isolated in only a few splits, so it gets a higher anomaly score. The implementation uses
+              a fixed random seed for repeatability. Its expected anomaly fraction is
+              <code>amountanom / row_count</code>, limited to the range 1%–20%.
+            </p>
+            <div class="callout">
+              <strong>Tiny example:</strong> among 1,000 HTTP rows, 990 are GET requests with small responses.
+              One row has a rare method, a 200-character URI, a 500 MB response, and a linked executable.
+              Random splits isolate that unusual combination quickly. With <code>-a 10</code>, contamination is
+              <code>10/1000 = 1%</code>.
+            </div>
+          </div>
+
+          <div class="teaching-card">
+            <h3>Rarity scoring: add up uncommon evidence</h3>
+            <p>
+              Event and inventory logs often have no dense numeric geometry to learn. For them, an uncommon
+              event name, host, service, MAC address, or state can be the useful signal. A categorical value's
+              rarity is:
+            </p>
+            <div class="codeblock"><code>rarity(value) = -ln(rows_with_value / all_rows)</code></div>
+            <p>
+              A value in every row scores 0. A value in 50 of 100 rows scores 0.69. A value in 1 of 100 rows
+              scores 4.61. The scorer adds every varying feature in that builder and marks the top
+              <code>-a</code> rows.
+            </p>
+            <div class="callout">
+              <strong>Tiny example:</strong> a weird event has <code>name_rarity=4.61</code>,
+              <code>source_rarity=2.30</code>, and <code>peer_rarity=0.69</code>. Ignoring its other fields, its
+              summed score is <code>7.60</code>.
+            </div>
+            <p class="example">
+              Exact implementation detail: all varying numeric builder outputs are summed, not only fields
+              ending in <code>_rarity</code>. Raw values such as a port number, timestamp, message length, or
+              Boolean flag can therefore also affect the scale. Scores are meaningful only within that file.
+            </p>
+          </div>
+
+          <div class="teaching-card">
+            <h3>Hybrid DNS scoring: suspicious evidence minus benign discovery</h3>
+            <p>
+              DNS needs domain knowledge because random-looking names can be suspicious while mDNS, reverse
+              lookups, and service discovery are often harmless. The scorer first converts each selected signal
+              to an absolute z-score—how many standard deviations it is from that log's average—and applies
+              explicit weights.
+            </p>
+            <div class="codeblock"><code>score = unusual DNS evidence
+      + direct DGA bonuses
+      - benign-discovery penalties
+score = max(0, score)</code></div>
+            <ul class="bullet-list">
+              <li>
+                Strong positive evidence: <code>dga_like</code>, many DGA-like queries from the source, repeated
+                DGA-shaped patterns, high entropy, diverse characters, digits, rare query/TLD/type/response,
+                no answer, rejection, and related weird events.
+              </li>
+              <li>
+                Direct bonuses make an actual DGA flag and repeated DGA behavior matter even before comparison
+                with the average row.
+              </li>
+              <li>
+                Penalties subtract 6 for mDNS, 6 for <code>.local</code>, 5 for reverse lookup, and 5 for
+                service discovery. Negative totals are clipped to zero.
+              </li>
+              <li>The top <code>-a</code> scores receive <code>pred=1</code>.</li>
+            </ul>
+            <div class="callout">
+              <strong>Tiny example:</strong> <code>x7k2m9qz12.example</code> has high entropy, many unique
+              characters, digits, no answer, and six similar queries from the same source, so several positive
+              terms reinforce one another. In contrast, <code>_ipp._tcp.local</code> on port 5353 activates
+              mDNS, local-TLD, and service-discovery penalties and is pushed toward zero.
+            </div>
+            <p class="example">
+              Only the signals named above enter the current DNS score directly. Other DNS features in the
+              feature dictionary are computed for inspection and future model changes.
+            </p>
+          </div>
+
+          <div class="teaching-card">
+            <h3>Time-series deviation: unusual level plus unusual change</h3>
+            <p>
+              Rows in <code>stats.log</code> and <code>capture_loss.log</code> are ordered measurements, so the
+              previous row matters. For every varying feature, the scorer adds two quantities:
+            </p>
+            <div class="codeblock"><code>feature contribution =
+    abs(z-score of current value)
+  + abs(z-score of change from previous row)</code></div>
+            <p>
+              The first term catches an unusually high or low level. The second catches a sudden jump or drop,
+              even when the new level is not yet extreme. Contributions from all features are added, and the
+              top <code>-a</code> rows receive <code>pred=1</code>.
+            </p>
+            <div class="callout">
+              <strong>Tiny example:</strong> the event queue normally stays between 8 and 12, then jumps from
+              10 to 500. The value 500 has a large level z-score, and the change +490 has a large change
+              z-score, so that timestamp receives two strong contributions.
+            </div>
+          </div>
+
+          <div class="teaching-card">
+            <h3>Fallback standardized distance</h3>
+            <p>
+              Isolation Forest is skipped when it is unavailable, when fewer than two varying features exist,
+              or when fewer than eight rows exist. PCA also falls back when PyOD is unavailable or there are
+              too few rows/features. The fallback standardizes each feature and adds absolute z-scores:
+            </p>
+            <div class="codeblock"><code>fallback_score(row) = sum(abs((value - mean) / standard_deviation))</code></div>
+            <p>
+              This is simpler than PCA or Isolation Forest: it notices individually extreme values but is less
+              able to learn complex relationships between features. The top <code>-a</code> rows are labeled.
+            </p>
+          </div>
+
           <div class="callout">
-            <strong>Important:</strong> every detector yields a numeric score, but these scores are not
-            calibrated across different log types. A <code>conn.log</code> score should not be compared directly
-            to a <code>dns.log</code> score. Within-file percentile ranks are used where cross-file comparison is needed.
+            <strong>How to interpret the output:</strong> <code>score</code> is a within-log ranking number;
+            <code>pred=1</code> means the method selected the row as an outlier. Neither means “confirmed attack,”
+            and raw scores from different methods are not comparable. A PCA score of one million is not
+            automatically more dangerous than a DNS score of 20. Directory aggregation uses within-file
+            percentile ranks where cross-file comparison is needed.
           </div>
         </section>
 
@@ -792,6 +1244,11 @@ directory_score = min(100, core_score + 45 * behavior_score)</code></div>
           <h2>How to Use</h2>
           <h3>Single file</h3>
           <pre><code>python3 zeek_anomaly_detector.py -f conn.log</code></pre>
+          <p>
+            In this mode only <code>conn.log</code> is analyzed. PCA uses its eight documented numeric inputs;
+            the remaining printed columns are explanatory context. Use directory mode when you want cross-log
+            correlation, scan behavior scoring, a directory score, or baseline comparison.
+          </p>
 
           <h3>Directory analysis</h3>
           <pre><code>python3 zeek_anomaly_detector.py -d /path/to/zeek</code></pre>
