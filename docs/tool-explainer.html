@@ -608,7 +608,7 @@
                 It is appropriate when anomalies are unusual combinations of otherwise normal-looking fields.
               </p>
               <ul class="bullet-list">
-                <li>Primary use: <code>conn.log</code>, <code>http.log</code>, <code>files.log</code>, some TLS-style logs</li>
+                <li>Primary use: <code>http.log</code>, <code>files.log</code>, and some TLS-style logs</li>
                 <li>Score meaning: more isolated rows get higher anomaly score</li>
               </ul>
             </div>
@@ -791,25 +791,25 @@ directory_score = min(100, core_score + 45 * behavior_score)</code></div>
         <section id="usage">
           <h2>How to Use</h2>
           <h3>Single file</h3>
-          <pre><code>python3 zeek-anomaly-detector.py -f conn.log</code></pre>
+          <pre><code>python3 zeek_anomaly_detector.py -f conn.log</code></pre>
 
           <h3>Directory analysis</h3>
-          <pre><code>python3 zeek-anomaly-detector.py -d /path/to/zeek</code></pre>
+          <pre><code>python3 zeek_anomaly_detector.py -d /path/to/zeek</code></pre>
 
           <h3>With normal baseline</h3>
-          <pre><code>python3 zeek-anomaly-detector.py \
+          <pre><code>python3 zeek_anomaly_detector.py \
   -d /path/to/suspect \
   -N /path/to/normal1 \
   -N /path/to/normal2</code></pre>
 
           <h3>One-line final summary</h3>
-          <pre><code>python3 zeek-anomaly-detector.py \
+          <pre><code>python3 zeek_anomaly_detector.py \
   -d /path/to/suspect \
   -N /path/to/normal1 \
   --summary-line</code></pre>
 
           <h3>Export JSON and plots</h3>
-          <pre><code>python3 zeek-anomaly-detector.py \
+          <pre><code>python3 zeek_anomaly_detector.py \
   -d /path/to/zeek \
   -J summary.json \
   -P scores.pdf</code></pre>
