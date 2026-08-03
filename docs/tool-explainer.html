@@ -489,8 +489,8 @@
                 <tr><td><code>id.resp_p</code></td><td>Port on the responding or destination computer.</td><td class="example"><code>443</code> is commonly used for encrypted web traffic.</td></tr>
                 <tr><td><code>resp_bytes</code></td><td>Application-data bytes sent back by the responding computer, excluding network-protocol headers.</td><td class="example">A 10 MB response is approximately <code>10000000</code>.</td></tr>
                 <tr><td><code>orig_ip_bytes</code></td><td>Bytes sent by the originator including network-protocol headers, not only application data.</td><td class="example">1,200 application-data bytes plus headers might become <code>1380</code>.</td></tr>
-                <tr><td><code>resp_pkts</code></td><td>Number of packets sent by the responder.</td><td class="example">Row 6379 in the example has <code>27662</code> response packets.</td></tr>
-                <tr><td><code>resp_ip_bytes</code></td><td>Bytes sent by the responder including network-protocol headers.</td><td class="example">Row 6379 has <code>30085055</code>, approximately 30 MB.</td></tr>
+                <tr><td><code>resp_pkts</code></td><td>Number of packets sent by the responder.</td><td class="example">A response split across 42 packets gives <code>42</code>.</td></tr>
+                <tr><td><code>resp_ip_bytes</code></td><td>Bytes sent by the responder including network-protocol headers.</td><td class="example">A 10 MB application response plus headers might give about <code>10300000</code>.</td></tr>
                 <tr><td><code>ip_proto</code></td><td>Numeric IP protocol identifier.</td><td class="example"><code>6</code> is TCP, <code>17</code> is UDP, and <code>58</code> is IPv6 ICMP.</td></tr>
               </tbody>
             </table>
@@ -542,7 +542,7 @@
                 <tr><td><code>score</code></td><td>The PCA unusualness value. Higher means more unusual relative to other connections in this file. It is not a percentage or attack probability.</td></tr>
                 <tr><td><code>pred=1</code></td><td>PCA placed the row in the group it considers unusual—also called outliers. By default, this is approximately the highest-scoring 10% of rows.</td></tr>
                 <tr><td><code>-a 10</code></td><td>After PCA labels its outlier group, print only the ten rows with the largest scores. It does not change the approximately 10% outlier threshold.</td></tr>
-                <tr><td>Number at far left</td><td>The original row index in the loaded table. For example, <code>6379</code> identifies that connection's row; it is not an anomaly score.</td></tr>
+                <tr><td>Number at far left</td><td>The original row index in the loaded table. If an output line begins with <code>42</code>, it identifies row 42; it is not an anomaly score.</td></tr>
                 <tr><td><code>...</code></td><td>The program shortened the wide display by hiding some middle columns. Data was not removed from the analysis.</td></tr>
               </tbody>
             </table>
@@ -568,20 +568,46 @@
             </table>
           </div>
 
-          <h3>6. Reading two rows from the shown result</h3>
-          <ul class="bullet-list">
-            <li>
-              Row <code>6379</code> has <code>27662</code> responder packets and about 30 MB of responder IP
-              traffic. Those numeric values help explain its large score. The destination address
-              <code>92.122.48.42</code> and <code>service=ssl</code> are shown for investigation but did not
-              produce the score.
-            </li>
-            <li>
-              Row <code>4387</code> lasted about 29,436 seconds and sent substantial originator IP traffic but
-              recorded zero responder packets and bytes. That unusual numeric combination can produce a high
-              PCA score. The multicast destination <code>ff02::c</code> itself is not used by PCA.
-            </li>
-          </ul>
+          <h3>6. Two self-contained hypothetical examples</h3>
+          <p>
+            The following examples are invented only to demonstrate interpretation. They are not rows from a
+            capture, and the page does not assume that you have another table or screenshot open.
+          </p>
+          <div class="table-wrap">
+            <table class="feature-table">
+              <thead><tr><th>Hypothetical connection</th><th>How PCA could interpret it</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>duration=85</code><br>
+                    <code>id.resp_p=443</code><br>
+                    <code>resp_pkts=27662</code><br>
+                    <code>resp_ip_bytes=30000000</code><br>
+                    <code>ip_proto=6</code>
+                  </td>
+                  <td>
+                    This is a TCP connection with about 30 MB returned in many packets. It could score highly
+                    if connections of that size and packet count are uncommon in the file. An address or
+                    <code>service=ssl</code> printed beside it would help investigation but would not affect PCA.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>duration=29436</code><br>
+                    <code>orig_ip_bytes=1738640</code><br>
+                    <code>resp_pkts=0</code><br>
+                    <code>resp_ip_bytes=0</code><br>
+                    <code>ip_proto=17</code>
+                  </td>
+                  <td>
+                    This UDP connection lasts more than eight hours and is strongly one-sided: the originator
+                    sends traffic but the responder sends none. That combination could score highly if it is
+                    unlike the other connections in the file.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <h3>7. What this one-file analysis cannot tell you</h3>
           <ul class="bullet-list">
