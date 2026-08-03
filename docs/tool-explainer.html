@@ -445,95 +445,152 @@
         </section>
 
         <section id="single-file">
-          <h2>Single-File Mode: What <code>-f</code> Does and Does Not Use</h2>
+          <h2>Using <code>-f</code> with <code>conn.log</code>: Complete Standalone Explanation</h2>
           <p class="lede">
-            <code>-f</code> analyzes exactly one Zeek log. The columns printed in the anomaly table are kept
-            to help the analyst understand each row; they are not necessarily model inputs.
+            This section explains the complete analysis performed by the command below. You do not need to
+            read any other part of this page first.
           </p>
 
-          <div class="grid-2">
-            <div class="card">
-              <h3>What still happens</h3>
-              <ul class="bullet-list">
-                <li>The file is loaded and its log type is inferred from the filename stem.</li>
-                <li>The matching feature builder and scorer run on all rows in that file.</li>
-                <li>Rows receive <code>score</code> and <code>pred</code>, and the top <code>-a</code> selected rows are printed.</li>
-                <li>Original Zeek columns remain visible so a human can investigate the result.</li>
-              </ul>
-            </div>
-            <div class="card">
-              <h3>What is unavailable</h3>
-              <ul class="bullet-list">
-                <li>No other Zeek logs are loaded, so there is no cross-log <code>uid</code> or <code>fuid</code> evidence.</li>
-                <li>No directory maliciousness score or source-level scan behavior score is produced.</li>
-                <li>No normal-directory baseline comparison is performed; <code>-N</code> is a directory-mode feature.</li>
-                <li><code>--summary-line</code> is also a directory-mode feature.</li>
-              </ul>
-            </div>
-          </div>
+          <pre><code>python3 zeek_anomaly_detector.py -a 10 -f /path/to/conn.log</code></pre>
 
-          <h3>Special case: <code>-f conn.log</code></h3>
-          <p>
-            This invokes <code>score_conn_pca</code>. PCA receives only the following eight numeric columns.
-            Everything else may be printed, and some auxiliary values may be computed, but it does not enter
-            the PCA matrix.
-          </p>
           <div class="table-wrap">
             <table class="feature-table">
-              <thead><tr><th>Used by PCA</th><th>Not used by PCA</th><th>Why the unused values are still shown</th></tr></thead>
+              <thead><tr><th>Command part</th><th>Meaning</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>
-                    <code>duration</code><br>
-                    <code>orig_bytes</code><br>
-                    <code>id.resp_p</code><br>
-                    <code>resp_bytes</code><br>
-                    <code>orig_ip_bytes</code><br>
-                    <code>resp_pkts</code><br>
-                    <code>resp_ip_bytes</code><br>
-                    <code>ip_proto</code>
-                  </td>
-                  <td>
-                    <code>ts</code>, <code>uid</code><br>
-                    <code>id.orig_h</code>, <code>id.resp_h</code><br>
-                    <code>id.orig_p</code><br>
-                    <code>proto</code>, <code>service</code><br>
-                    <code>conn_state</code>, <code>history</code><br>
-                    <code>local_orig</code>, <code>local_resp</code><br>
-                    <code>missed_bytes</code>, <code>orig_pkts</code><br>
-                    <code>tunnel_parents</code>
-                  </td>
-                  <td>
-                    Addresses identify the endpoints; textual protocol and service explain the traffic;
-                    connection state and history show what happened; and <code>uid</code> supports manual lookup.
-                    They explain an anomaly but do not cause its PCA score.
-                  </td>
-                </tr>
+                <tr><td><code>python3 zeek_anomaly_detector.py</code></td><td>Run the detector program.</td></tr>
+                <tr><td><code>-f /path/to/conn.log</code></td><td>Read this one file only. No other Zeek file is opened.</td></tr>
+                <tr><td><code>-a 10</code></td><td>Print at most the ten highest-ranked connections after analysis.</td></tr>
               </tbody>
             </table>
           </div>
 
-          <div class="callout">
-            <strong>Protocol detail:</strong> textual <code>proto</code> such as <code>tcp</code> or
-            <code>udp</code> is not a PCA input. Numeric <code>ip_proto</code> is used instead—for example,
-            <code>6</code> for TCP, <code>17</code> for UDP, and <code>58</code> for IPv6 ICMP. Likewise,
-            <code>service=ssl</code> is displayed but does not directly increase the PCA score.
-          </div>
-
-          <div class="callout danger">
-            <strong>How to read the example output:</strong> a row can rank highly because its duration,
-            byte counts, responder packets, port, or numeric IP protocol form an unusual combination. It did
-            not rank highly merely because the destination IP is rare or because Zeek labeled the service
-            <code>ssl</code>. Also remember that <code>-a 10</code> prints ten results but does not change PyOD
-            PCA's default 10% outlier threshold.
-          </div>
-
+          <h3>1. What the input file represents</h3>
           <p>
-            For other single files, the corresponding scorer still applies: <code>-f dns.log</code> uses the
-            DNS hybrid, <code>-f http.log</code> uses Isolation Forest, and so on. However, any feature that
-            requires a missing companion log becomes zero or is absent. For example, HTTP cannot inherit linked
-            file metadata when <code>files.log</code> was not loaded.
+            <code>conn.log</code> is a table produced by Zeek. Each row describes one observed network
+            connection. Each column describes one property of that connection, such as its duration,
+            destination port, or number of bytes. The detector compares every row with all other rows in this
+            same file. It does not compare the file with a previously trained collection of normal traffic.
           </p>
+
+          <h3>2. The eight values that actually determine the result</h3>
+          <p>
+            Although the final table displays many columns, the calculation uses exactly the eight numeric
+            values below. A value of <code>-</code>, empty text, or a value that cannot be read as a number is
+            converted to zero. If one of these columns has the same value in every row, it is ignored because
+            it cannot help distinguish one connection from another.
+          </p>
+
+          <div class="table-wrap">
+            <table class="feature-table">
+              <thead><tr><th>Value used</th><th>Meaning</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td><code>duration</code></td><td>How many seconds the connection lasted.</td><td class="example"><code>84.975692</code> means about 85 seconds.</td></tr>
+                <tr><td><code>orig_bytes</code></td><td>Application-data bytes sent by the computer that started the connection, excluding network-protocol headers.</td><td class="example">A client sends 1,200 application-data bytes: <code>1200</code>.</td></tr>
+                <tr><td><code>id.resp_p</code></td><td>Port on the responding or destination computer.</td><td class="example"><code>443</code> is commonly used for encrypted web traffic.</td></tr>
+                <tr><td><code>resp_bytes</code></td><td>Application-data bytes sent back by the responding computer, excluding network-protocol headers.</td><td class="example">A 10 MB response is approximately <code>10000000</code>.</td></tr>
+                <tr><td><code>orig_ip_bytes</code></td><td>Bytes sent by the originator including network-protocol headers, not only application data.</td><td class="example">1,200 application-data bytes plus headers might become <code>1380</code>.</td></tr>
+                <tr><td><code>resp_pkts</code></td><td>Number of packets sent by the responder.</td><td class="example">Row 6379 in the example has <code>27662</code> response packets.</td></tr>
+                <tr><td><code>resp_ip_bytes</code></td><td>Bytes sent by the responder including network-protocol headers.</td><td class="example">Row 6379 has <code>30085055</code>, approximately 30 MB.</td></tr>
+                <tr><td><code>ip_proto</code></td><td>Numeric IP protocol identifier.</td><td class="example"><code>6</code> is TCP, <code>17</code> is UDP, and <code>58</code> is IPv6 ICMP.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>3. How PCA learns what is unusual</h3>
+          <p>
+            The calculation uses <strong>Principal Component Analysis (PCA)</strong>. PCA is a way to learn
+            which numeric values normally increase, decrease, or stay stable together. It does not know what an
+            attack is, and it has no attack signatures. It only learns the common numeric patterns inside this
+            <code>conn.log</code>.
+          </p>
+          <ol class="bullet-list">
+            <li>
+              <strong>Make the values comparable.</strong> Response bytes may be in the millions while
+              <code>ip_proto</code> is usually a small number. The program converts each of the eight columns to
+              a common scale based on that column's average and spread. This prevents byte counts from winning
+              only because their units are larger.
+            </li>
+            <li>
+              <strong>Learn relationships.</strong> Response bytes and response packets usually grow together.
+              Duration and byte count may also follow recurring patterns. PCA learns these relationships from
+              all connections in the file.
+            </li>
+            <li>
+              <strong>Measure every connection.</strong> A connection receives a larger anomaly score when its
+              eight values are far from the common patterns. Unusual combinations matter: for example, a huge
+              packet count with almost no bytes is different from ordinary transfers.
+            </li>
+            <li>
+              <strong>Rank the results.</strong> Larger scores are placed first. The score is only a ranking
+              within this file; it is not a probability and does not prove that the connection is malicious.
+            </li>
+          </ol>
+
+          <div class="callout">
+            <strong>Small PCA example:</strong> imagine that ordinary 100-packet responses contain about 100 KB
+            and ordinary 1,000-packet responses contain about 1 MB. PCA learns that packets and bytes usually
+            grow together. A 1,000-packet response containing only 2 KB breaks that relationship and can receive
+            a high score. An exceptionally large transfer can also score highly because it is far from typical
+            connections, even when its packet-to-byte relationship is ordinary.
+          </div>
+
+          <h3>4. What <code>score</code>, <code>pred</code>, and <code>-a 10</code> mean</h3>
+          <div class="table-wrap">
+            <table class="feature-table">
+              <thead><tr><th>Output</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>score</code></td><td>The PCA unusualness value. Higher means more unusual relative to other connections in this file. It is not a percentage or attack probability.</td></tr>
+                <tr><td><code>pred=1</code></td><td>PCA placed the row in the group it considers unusual—also called outliers. By default, this is approximately the highest-scoring 10% of rows.</td></tr>
+                <tr><td><code>-a 10</code></td><td>After PCA labels its outlier group, print only the ten rows with the largest scores. It does not change the approximately 10% outlier threshold.</td></tr>
+                <tr><td>Number at far left</td><td>The original row index in the loaded table. For example, <code>6379</code> identifies that connection's row; it is not an anomaly score.</td></tr>
+                <tr><td><code>...</code></td><td>The program shortened the wide display by hiding some middle columns. Data was not removed from the analysis.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>5. Columns that are displayed but do not change the PCA score</h3>
+          <p>
+            The program prints these values because they help a person understand and investigate a selected
+            connection. They are context for the reader, not inputs to the calculation.
+          </p>
+          <div class="table-wrap">
+            <table class="feature-table">
+              <thead><tr><th>Displayed value</th><th>Why it is useful to a person</th><th>Effect on PCA</th></tr></thead>
+              <tbody>
+                <tr><td><code>id.orig_h</code>, <code>id.resp_h</code></td><td>Show which IP addresses communicated.</td><td>None. A rare destination IP does not directly increase the score.</td></tr>
+                <tr><td><code>id.orig_p</code></td><td>Shows the originator's port.</td><td>None. Only responder port <code>id.resp_p</code> is used.</td></tr>
+                <tr><td><code>proto</code></td><td>Shows readable text such as <code>tcp</code> or <code>udp</code>.</td><td>None. The numeric <code>ip_proto</code> value is used instead.</td></tr>
+                <tr><td><code>service</code></td><td>Shows Zeek's application guess, such as <code>ssl</code> or <code>dhcp</code>.</td><td>None. A row does not score higher merely because <code>service=ssl</code>.</td></tr>
+                <tr><td><code>conn_state</code>, <code>history</code></td><td>Explain how the connection progressed at packet level.</td><td>None in this PCA calculation.</td></tr>
+                <tr><td><code>ts</code>, <code>uid</code></td><td>Give the time and Zeek identifier needed to locate the connection.</td><td>None.</td></tr>
+                <tr><td><code>local_orig</code>, <code>local_resp</code>, <code>missed_bytes</code>, <code>orig_pkts</code>, <code>tunnel_parents</code></td><td>Provide additional investigation context.</td><td>None in this PCA calculation.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>6. Reading two rows from the shown result</h3>
+          <ul class="bullet-list">
+            <li>
+              Row <code>6379</code> has <code>27662</code> responder packets and about 30 MB of responder IP
+              traffic. Those numeric values help explain its large score. The destination address
+              <code>92.122.48.42</code> and <code>service=ssl</code> are shown for investigation but did not
+              produce the score.
+            </li>
+            <li>
+              Row <code>4387</code> lasted about 29,436 seconds and sent substantial originator IP traffic but
+              recorded zero responder packets and bytes. That unusual numeric combination can produce a high
+              PCA score. The multicast destination <code>ff02::c</code> itself is not used by PCA.
+            </li>
+          </ul>
+
+          <h3>7. What this one-file analysis cannot tell you</h3>
+          <ul class="bullet-list">
+            <li>It does not read DNS, HTTP, file, notice, or other Zeek logs.</li>
+            <li>It does not know whether an IP address or domain is reputable.</li>
+            <li>It does not combine evidence belonging to the same network activity across different files.</li>
+            <li>It does not produce one overall score for the complete capture.</li>
+            <li>It finds what is unusual inside this file, which is not automatically the same as malicious.</li>
+          </ul>
         </section>
 
         <section id="pipeline">
