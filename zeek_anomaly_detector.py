@@ -2021,8 +2021,14 @@ def detect(log_name, file, df, context, amountanom, dumptocsv, verbosity=0, debu
         return summarize_file_result(log_name, enriched, anomalous, amountanom, used_cols, method)
 
     if print_output:
-        print(f'\nTop anomalies in {Path(file).name}')
-        print(anomalous[select_print_columns(anomalous)])
+        # Show every column even when the output is piped to a file or another command.
+        # Without this, pandas drops the middle columns behind an ellipsis when it cannot
+        # see a terminal. max_columns=None keeps all of them. width=None lets pandas pick
+        # the width, so wide output wraps into blocks instead of hiding columns. These
+        # settings apply only to this print and are restored afterwards.
+        with pd.option_context('display.max_columns', None, 'display.width', None):
+            print(f'\nTop anomalies in {Path(file).name}')
+            print(anomalous[select_print_columns(anomalous)])
     return summarize_file_result(log_name, enriched, anomalous, amountanom, used_cols, method)
 
 
